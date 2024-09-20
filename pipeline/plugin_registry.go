@@ -1,0 +1,44 @@
+// pipeline/plugin_registry.go
+package pipeline
+
+import (
+    "fmt"
+    "github.com/serisow/lesocle/pipeline/llm_service"
+)
+
+type PluginRegistry struct {
+    stepTypes   map[string]func() Step
+    llmServices map[string]llm_service.LLMService
+}
+
+func NewPluginRegistry() *PluginRegistry {
+    return &PluginRegistry{
+        stepTypes:   make(map[string]func() Step),
+        llmServices: make(map[string]llm_service.LLMService),
+    }
+}
+
+// RegisterStepType registers a new step type
+func (pr *PluginRegistry) RegisterStepType(typeName string, factory func() Step) {
+    pr.stepTypes[typeName] = factory
+}
+
+// GetStepInstance returns a new instance of a step type
+func (pr *PluginRegistry) GetStepInstance(typeName string) (Step, error) {
+    factory, ok := pr.stepTypes[typeName]
+    if !ok {
+        return nil, fmt.Errorf("unknown step type: %s", typeName)
+    }
+    return factory(), nil
+}
+
+// RegisterLLMService registers a new LLM service
+func (pr *PluginRegistry) RegisterLLMService(name string, service llm_service.LLMService) {
+    pr.llmServices[name] = service
+}
+
+// GetLLMService returns an LLM service by name
+func (pr *PluginRegistry) GetLLMService(name string) (llm_service.LLMService, bool) {
+    service, ok := pr.llmServices[name]
+    return service, ok
+}
