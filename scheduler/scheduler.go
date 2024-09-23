@@ -59,13 +59,13 @@ func (s *Scheduler) fetchFullPipeline(id string) (pipeline.Pipeline, error) {
         return pipeline.Pipeline{}, fmt.Errorf("failed to read response body: %v", err)
     }
 
-    var pipeline pipeline.Pipeline
-    err = json.Unmarshal(body, &pipeline)
+    var p pipeline.Pipeline
+    err = json.Unmarshal(body, &p)
     if err != nil {
-        return pipeline, fmt.Errorf("failed to unmarshal JSON: %v", err)
+        return p, fmt.Errorf("failed to unmarshal JSON: %v", err)
     }
-
-    return pipeline, nil
+    p.Context = pipeline.NewContext()
+    return p, nil
 }
 
 func (s *Scheduler) fetchScheduledPipelines() ([]pipeline.ScheduledPipeline, error) {
@@ -97,7 +97,7 @@ func (s *Scheduler) executePipeline(pipelineID string) {
         return
     }
 
-    err = pipeline.ExecutePipeline(fullPipeline, s.registry)
+    err = pipeline.ExecutePipeline(&fullPipeline, s.registry)
     if err != nil {
         log.Printf("Error executing pipeline %s: %v", pipelineID, err)
     } else {

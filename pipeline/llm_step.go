@@ -14,25 +14,21 @@ type LLMStepImpl struct {
 }
 
 func (s *LLMStepImpl) Execute(ctx context.Context, pipelineContext *Context) error {
-	// Split required steps, handling the case where it might be empty
-	var requiredStepsList []string
-	if s.RequiredSteps != "" {
-		requiredStepsList = strings.Split(s.RequiredSteps, ",")
-	}
+    // Split required steps
+    requiredSteps := strings.Split(s.RequiredSteps, "\r\n")
 
-	// Replace placeholders in the prompt with previous step outputs
-	prompt := s.Prompt
-	for _, requiredStep := range requiredStepsList {
-		requiredStep = strings.TrimSpace(requiredStep)
-		if requiredStep == "" {
-			continue
-		}
-		if value, ok := pipelineContext.GetStepOutput(requiredStep); ok {
-			placeholder := fmt.Sprintf("{%s}", requiredStep)
-			prompt = strings.Replace(prompt, placeholder, fmt.Sprintf("%v", value), -1)
-		}
-	}
-
+    // Replace placeholders in the prompt with previous step outputs
+    prompt := s.Prompt
+    for _, requiredStep := range requiredSteps {
+        requiredStep = strings.TrimSpace(requiredStep)
+        if requiredStep == "" {
+            continue
+        }
+        if value, ok := pipelineContext.GetStepOutput(requiredStep); ok {
+            placeholder := fmt.Sprintf("{%s}", requiredStep)
+            prompt = strings.Replace(prompt, placeholder, fmt.Sprintf("%v", value), -1)
+        }
+    }
 	// Ensure LLMService is not nil
 	if s.LLMServiceInstance == nil {
 		return fmt.Errorf("LLMService is not initialized for step %s", s.ID)
@@ -44,14 +40,9 @@ func (s *LLMStepImpl) Execute(ctx context.Context, pipelineContext *Context) err
 		return fmt.Errorf("error calling LLM service for step %s: %w", s.ID, err)
 	}
 
-	// Set the output if StepOutputKey is provided
-	if s.StepOutputKey != "" {
-		pipelineContext.SetStepOutput(s.StepOutputKey, result)
-	}
-
-	// Store the response
-	s.Response = result
-
+    if s.StepOutputKey != "" {
+        pipelineContext.SetStepOutput(s.StepOutputKey, result)
+    }
 	return nil
 }
 

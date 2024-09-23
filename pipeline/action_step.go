@@ -1,8 +1,12 @@
 package pipeline
 
 import (
-    "context"
-    "fmt"
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
 type ActionStepImpl struct {
@@ -25,24 +29,42 @@ func (s *ActionStepImpl) Execute(ctx context.Context, pipelineContext *Context) 
     }
 }
 
-func (s *ActionStepImpl) GetType() string {
-    return "action_step"
-}
-
 func (s *ActionStepImpl) createArticle(ctx context.Context, pipelineContext *Context) error {
-    // Implementation for creating an article
-    // This might involve using the results from previous steps
-    content, ok := pipelineContext.GetStepOutput(s.RequiredSteps)
-    if !ok {
-        return fmt.Errorf("required content not found for creating article")
+    requiredSteps := strings.Split(s.RequiredSteps, "\r\n")
+    var content string
+    for _, requiredStep := range requiredSteps {
+        requiredStep = strings.TrimSpace(requiredStep)
+        if requiredStep == "" {
+            continue
+        }
+        stepOutput, ok := pipelineContext.GetStepOutput(requiredStep)
+        if !ok {
+            return fmt.Errorf("required content not found for creating article: %s", requiredStep)
+        }
+        content += fmt.Sprintf("%v", stepOutput)
     }
 
-    // Here you would typically interact with your content management system
-    // to create the actual article. For now, we'll just log it.
-    fmt.Printf("Creating article with content: %s\n", content)
+    // Create a filename with a timestamp
+    timestamp := time.Now().Format("20060102_150405")
+    filename := filepath.Join("output", fmt.Sprintf("article_%s.txt", timestamp))
+
+    // Ensure the output directory exists
+    err := os.MkdirAll("output", os.ModePerm)
+    if err != nil {
+        return fmt.Errorf("failed to create output directory: %w", err)
+    }
+
+    // Write the content to the file
+    err = os.WriteFile(filename, []byte(content), 0644)
+    if err != nil {
+        return fmt.Errorf("failed to write article to file: %w", err)
+    }
+
+    fmt.Printf("Article created and saved to: %s\n", filename)
 
     return nil
 }
+
 
 func (s *ActionStepImpl) updateEntity(ctx context.Context, pipelineContext *Context) error {
     // Implementation for updating an entity
@@ -57,4 +79,8 @@ func (s *ActionStepImpl) deleteEntity(ctx context.Context, pipelineContext *Cont
 func (s *ActionStepImpl) callAPI(ctx context.Context, pipelineContext *Context) error {
     // Implementation for calling an external API
     return fmt.Errorf("callAPI not implemented")
+}
+
+func (s *ActionStepImpl) GetType() string {
+    return "action_step"
 }
