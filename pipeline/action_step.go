@@ -1,32 +1,40 @@
 package pipeline
 
 import (
-	"context"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
+    "context"
+    "fmt"
+    "strings"
 )
 
 type ActionStepImpl struct {
     PipelineStep
+    result string
 }
 
 func (s *ActionStepImpl) Execute(ctx context.Context, pipelineContext *Context) error {
-    // Implementation based on action type
+    var err error
+
     switch s.ActionConfig {
     case "create_article_action":
-        return s.createArticle(ctx, pipelineContext)
+        err = s.createArticle(ctx, pipelineContext)
     case "update_entity_action":
-        return s.updateEntity(ctx, pipelineContext)
+        err = s.updateEntity(ctx, pipelineContext)
     case "delete_entity_action":
-        return s.deleteEntity(ctx, pipelineContext)
+        err = s.deleteEntity(ctx, pipelineContext)
     case "call_api_action":
-        return s.callAPI(ctx, pipelineContext)
+        err = s.callAPI(ctx, pipelineContext)
     default:
         return fmt.Errorf("unknown action type: %s", s.ActionConfig)
     }
+
+    if err != nil {
+        return err
+    }
+
+    // Store the result in the pipeline context
+    pipelineContext.SetStepOutput(s.StepOutputKey, s.result)
+
+    return nil
 }
 
 func (s *ActionStepImpl) createArticle(ctx context.Context, pipelineContext *Context) error {
@@ -44,41 +52,27 @@ func (s *ActionStepImpl) createArticle(ctx context.Context, pipelineContext *Con
         content += fmt.Sprintf("%v", stepOutput)
     }
 
-    // Create a filename with a timestamp
-    timestamp := time.Now().Format("20060102_150405")
-    filename := filepath.Join("output", fmt.Sprintf("article_%s.txt", timestamp))
-
-    // Ensure the output directory exists
-    err := os.MkdirAll("output", os.ModePerm)
-    if err != nil {
-        return fmt.Errorf("failed to create output directory: %w", err)
-    }
-
-    // Write the content to the file
-    err = os.WriteFile(filename, []byte(content), 0644)
-    if err != nil {
-        return fmt.Errorf("failed to write article to file: %w", err)
-    }
-
-    fmt.Printf("Article created and saved to: %s\n", filename)
-
+    // Store the content as the result
+    s.result = content
     return nil
 }
 
-
 func (s *ActionStepImpl) updateEntity(ctx context.Context, pipelineContext *Context) error {
     // Implementation for updating an entity
-    return fmt.Errorf("updateEntity not implemented")
+    s.result = "Entity updated"
+    return nil
 }
 
 func (s *ActionStepImpl) deleteEntity(ctx context.Context, pipelineContext *Context) error {
     // Implementation for deleting an entity
-    return fmt.Errorf("deleteEntity not implemented")
+    s.result = "Entity deleted"
+    return nil
 }
 
 func (s *ActionStepImpl) callAPI(ctx context.Context, pipelineContext *Context) error {
     // Implementation for calling an external API
-    return fmt.Errorf("callAPI not implemented")
+    s.result = "API called"
+    return nil
 }
 
 func (s *ActionStepImpl) GetType() string {

@@ -1,23 +1,23 @@
+// anthropic.go
+
 package llm_service
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strconv"
-	"time"
-
-	"go.uber.org/zap"
+    "bytes"
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "time"
+    "log/slog"
 )
 
 type AnthropicService struct {
     httpClient *http.Client
-    logger     *zap.Logger
+    logger     *slog.Logger
 }
 
-func NewAnthropicService(logger *zap.Logger) *AnthropicService {
+func NewAnthropicService(logger *slog.Logger) *AnthropicService {
     return &AnthropicService{
         httpClient: &http.Client{Timeout: 120 * time.Second},
         logger:     logger,
@@ -25,6 +25,33 @@ func NewAnthropicService(logger *zap.Logger) *AnthropicService {
 }
 
 func (s *AnthropicService) CallLLM(ctx context.Context, config map[string]interface{}, prompt string) (string, error) {
+    maxRetries := 3
+    retryDelay := 5 * time.Second
+
+    for attempt := 1; attempt <= maxRetries; attempt++ {
+        response, err := s.callAnthropic(ctx, config, prompt)
+        if err == nil {
+            return response, nil
+        }
+
+        if attempt == maxRetries {
+            s.logger.Error("Error calling Anthropic API after multiple attempts",
+                slog.Int("attempts", maxRetries),
+                slog.String("error", err.Error()))
+            return "", fmt.Errorf("failed to call Anthropic API after %d attempts: %w", maxRetries, err)
+        }
+
+        s.logger.Warn("Attempt failed, retrying",
+            slog.Int("attempt", attempt),
+            slog.Duration("retryDelay", retryDelay),
+            slog.String("error", err.Error()))
+        time.Sleep(retryDelay)
+    }
+
+    return "", fmt.Errorf("failed to call Anthropic API after exhausting all retry attempts")
+}
+
+func (s *AnthropicService) callAnthropic(ctx context.Context, config map[string]interface{}, prompt string) (string, error) {
     apiURL, ok := config["api_url"].(string)
     if !ok {
         return "", fmt.Errorf("api_url not found in config")
@@ -40,27 +67,13 @@ func (s *AnthropicService) CallLLM(ctx context.Context, config map[string]interf
         return "", fmt.Errorf("model_name not found in config")
     }
 
-
     maxTokens, ok := config["parameters"].(map[string]interface{})["max_tokens"]
     if !ok {
         return "", fmt.Errorf("max_tokens not found in config parameters")
     }
 
-    // Convert maxTokens to int, handling both string and float64 cases
-    var maxTokensInt int
-    switch v := maxTokens.(type) {
-    case string:
-        parsedValue, err := strconv.Atoi(v)
-        if err != nil {
-            return "", fmt.Errorf("failed to parse max_tokens as integer: %w", err)
-        }
-        maxTokensInt = parsedValue
-    case float64:
-        maxTokensInt = int(v)
-    default:
-        return "", fmt.Errorf("unexpected type for max_tokens: %T", maxTokens)
-    }
-    
+    maxTokensInt := int(safeParseFloat(maxTokens, 1000))
+
     requestBody, err := json.Marshal(map[string]interface{}{
         "model": modelName,
         "messages": []map[string]string{

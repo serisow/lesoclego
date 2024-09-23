@@ -1,4 +1,5 @@
 .vscode
+.env
 launch.json
 output
-lesocle
+./lesocle

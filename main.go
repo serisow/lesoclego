@@ -1,7 +1,9 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -10,17 +12,18 @@ import (
 	"github.com/serisow/lesocle/pipeline/llm_service"
 	"github.com/serisow/lesocle/scheduler"
 	"github.com/serisow/lesocle/server"
-	"go.uber.org/zap"
 
 	"github.com/urfave/negroni"
 )
 
 func main() {
 	cfg := config.Load()
+	// Initialize the logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Initialize PluginRegistry
 	registry := pipeline.NewPluginRegistry()
-	registerStepTypes(registry)
+	registerStepTypes(registry, logger)
 
 	// Initialize scheduler with PluginRegistry
 	s := scheduler.New(cfg.APIEndpoint, cfg.CheckInterval, registry)
@@ -57,10 +60,8 @@ func setupNegroni(r *mux.Router) *negroni.Negroni {
 	return n
 }
 
-func registerStepTypes(registry *pipeline.PluginRegistry) {
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
-
+func registerStepTypes(registry *pipeline.PluginRegistry, logger *slog.Logger) {
+	// Register the Step Types
 	registry.RegisterStepType("llm_step", func() pipeline.Step {
 		return &pipeline.LLMStepImpl{
 			LLMServiceInstance: nil, // This will be set later based on configuration
@@ -70,6 +71,8 @@ func registerStepTypes(registry *pipeline.PluginRegistry) {
 		return &pipeline.ActionStepImpl{}
 	})
 
+	// Register the LLM Services
 	registry.RegisterLLMService("openai", llm_service.NewOpenAIService(logger))
 	registry.RegisterLLMService("anthropic", llm_service.NewAnthropicService(logger))
+	registry.RegisterLLMService("gemini", llm_service.NewGeminiService(logger))
 }

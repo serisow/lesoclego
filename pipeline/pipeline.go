@@ -1,9 +1,13 @@
 package pipeline
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 
+	"github.com/serisow/lesocle/config"
 	"github.com/serisow/lesocle/pipeline/llm_service"
 )
 
@@ -45,6 +49,8 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
         p.Context = NewContext()
     }
 
+	results := make(map[string]interface{})
+
 	for _, pipelineStep := range p.Steps {
 		var step Step
 		var err error
@@ -77,7 +83,52 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 		if err != nil {
 			return fmt.Errorf("error executing step %s: %w", pipelineStep.ID, err)
 		}
+		// Collect step results
+		output, _ := p.Context.GetStepOutput(pipelineStep.StepOutputKey)
+		results[pipelineStep.UUID] = map[string]interface{}{
+			"output": output,
+		}
 	}
 
+	// Send execution results to Drupal
+	err := SendExecutionResults(p.ID, results)
+	if err != nil {
+		return fmt.Errorf("error sending execution results: %w", err)
+	}
+	
 	return nil
+}
+
+func SendExecutionResults(pipelineID string, results map[string]interface{}) error {
+	cfg := config.Load()
+
+    apiEndpoint := fmt.Sprintf("%s/pipeline/%s/execution-result", cfg.APIEndpoint, pipelineID)
+
+    jsonData, err := json.Marshal(map[string]interface{}{
+        "step_results": results,
+    })
+    if err != nil {
+        return fmt.Errorf("error marshaling results: %w", err)
+    }
+
+    req, err := http.NewRequest("POST", apiEndpoint, bytes.NewBuffer(jsonData))
+    if err != nil {
+        return fmt.Errorf("error creating request: %w", err)
+    }
+
+    req.Header.Set("Content-Type", "application/json")
+    //req.SetBasicAuth(config.DrupalUsername, config.DrupalPassword)
+
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        return fmt.Errorf("error sending results: %w", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+    }
+
+    return nil
 }

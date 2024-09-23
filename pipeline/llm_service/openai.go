@@ -9,15 +9,15 @@ import (
 	"net/http"
 	"time"
 
-	"go.uber.org/zap"
+	 "log/slog"
 )
 
 type OpenAIService struct {
     httpClient *http.Client
-    logger     *zap.Logger
+    logger     *slog.Logger
 }
 
-func NewOpenAIService(logger *zap.Logger) *OpenAIService {
+func NewOpenAIService(logger *slog.Logger) *OpenAIService {
     return &OpenAIService{
         httpClient: &http.Client{Timeout: 120 * time.Second},
         logger:     logger,
@@ -36,15 +36,15 @@ func (s *OpenAIService) CallLLM(ctx context.Context, config map[string]interface
 
         if attempt == maxRetries {
             s.logger.Error("Error calling OpenAI API after multiple attempts",
-                zap.Int("attempts", maxRetries),
-                zap.Error(err))
+                slog.Int("attempts", maxRetries),
+                slog.String("error",err.Error()))
             return "", fmt.Errorf("failed to call OpenAI API after %d attempts: %w", maxRetries, err)
         }
 
         s.logger.Warn("Attempt failed, retrying",
-            zap.Int("attempt", attempt),
-            zap.Duration("retryDelay", retryDelay),
-            zap.Error(err))
+            slog.Int("attempt", attempt),
+            slog.Duration("retryDelay", retryDelay),
+            slog.String("error", err.Error()))
         time.Sleep(retryDelay)
     }
 
