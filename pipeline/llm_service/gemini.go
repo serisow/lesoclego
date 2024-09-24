@@ -84,7 +84,7 @@ func (s *GeminiService) callGemini(ctx context.Context, config map[string]interf
         },
         "generationConfig": map[string]interface{}{
             "temperature":      safeParseFloat(params["temperature"], 1.0),
-            "topK":             safeParseFloat(params["top_k"], 64.0),
+            "topK":             safeParseFloat(params["top_k"], 40),
             "topP":             safeParseFloat(params["top_p"], 0.95),
             "maxOutputTokens":  safeParseFloat(params["max_tokens"], 8192.0),
             "responseMimeType": "text/plain",
