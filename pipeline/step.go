@@ -18,3 +18,8 @@ type ActionStep interface {
     Step
     PerformAction(config map[string]interface{}) error
 }
+
+type GoogleSearchStep interface {
+    Step
+    // Add any specific methods for Google search if needed
+}

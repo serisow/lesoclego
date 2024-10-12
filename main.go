@@ -70,9 +70,13 @@ func registerStepTypes(registry *pipeline.PluginRegistry, logger *slog.Logger) {
 	registry.RegisterStepType("action_step", func() pipeline.Step {
 		return &pipeline.ActionStepImpl{}
 	})
+	registry.RegisterStepType("google_search", func() pipeline.Step {
+        return &pipeline.GoogleSearchStepImpl{}
+    })
 
 	// Register the LLM Services
 	registry.RegisterLLMService("openai", llm_service.NewOpenAIService(logger))
+	registry.RegisterLLMService("openai_image", llm_service.NewOpenAIImageService(logger)) // use dall-e model for now
 	registry.RegisterLLMService("anthropic", llm_service.NewAnthropicService(logger))
 	registry.RegisterLLMService("gemini", llm_service.NewGeminiService(logger))
 }

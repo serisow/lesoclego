@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/serisow/lesocle/config"
 	"github.com/serisow/lesocle/pipeline/llm_service"
@@ -34,6 +35,7 @@ type PipelineStep struct {
 	Weight           int                    `json:"weight"`
 	StepDescription  string                 `json:"step_description"`
 	StepOutputKey    string                 `json:"step_output_key"`
+	OutputType       string                 `json:"output_type"`
     RequiredSteps    string                 `json:"required_steps"`
 	LLMConfig        string                 `json:"llm_config,omitempty"`
 	Prompt           string                 `json:"prompt,omitempty"`
@@ -41,6 +43,24 @@ type PipelineStep struct {
 	UUID             string                 `json:"uuid"`
 	LLMServiceConfig map[string]interface{} `json:"llm_service,omitempty"`
 	ActionConfig     string                 `json:"action_config,omitempty"`
+	GoogleSearchConfig *GoogleSearchConfig   `json:"google_search_config,omitempty"`
+}
+
+type GoogleSearchConfig struct {
+    Query          string             `json:"query"`
+    Category       string             `json:"category"`
+    AdvancedParams GoogleSearchParams `json:"advanced_params"`
+}
+
+type GoogleSearchParams struct {
+    NumResults   string `json:"num_results"`
+    DateRestrict string `json:"date_restrict"`
+    Sort         string `json:"sort"`
+    Language     string `json:"language"`
+    Country      string `json:"country"`
+    SiteSearch   string `json:"site_search"`
+    FileType     string `json:"file_type"`
+    SafeSearch   string `json:"safe_search"`
 }
 
 func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
@@ -50,8 +70,12 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
     }
 
 	results := make(map[string]interface{})
+	pipelineStartTime := time.Now().Unix()
+
 
 	for _, pipelineStep := range p.Steps {
+		stepStartTime := time.Now().Unix()
+
 		var step Step
 		var err error
 
@@ -74,24 +98,44 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 
 		case "action_step":
 			step = &ActionStepImpl{PipelineStep: pipelineStep}
-
+		case "google_search":
+            step = &GoogleSearchStepImpl{PipelineStep: pipelineStep}
 		default:
 			return fmt.Errorf("unknown step type: %s", pipelineStep.Type)
 		}
 
 		err = step.Execute(ctx, p.Context)
-		if err != nil {
-			return fmt.Errorf("error executing step %s: %w", pipelineStep.ID, err)
-		}
-		// Collect step results
+		stepEndTime := time.Now().Unix()
+		stepDuration := stepEndTime - stepStartTime
+
 		output, _ := p.Context.GetStepOutput(pipelineStep.StepOutputKey)
-		results[pipelineStep.UUID] = map[string]interface{}{
-			"output": output,
+		stepResult := map[string]interface{}{
+			"step_uuid":        pipelineStep.UUID,
+			"step_description": pipelineStep.StepDescription,
+			"status":           "completed",
+			"start_time":       stepStartTime,
+			"end_time":         stepEndTime,
+			"duration":         stepDuration,
+			"step_type":        pipelineStep.Type,
+			"sequence":         pipelineStep.Weight,
+			"data":             output,
+			"output_type":      pipelineStep.OutputType,
+			"error_message":    "",
 		}
+
+		if err != nil {
+			stepResult["status"] = "failed"
+			stepResult["error_message"] = err.Error()
+			stepResult["data"] = fmt.Sprintf("Error: %v", err)
+		}
+
+		results[pipelineStep.UUID] = stepResult
 	}
 
+	pipelineEndTime := time.Now().Unix()
+
 	// Send execution results to Drupal
-	err := SendExecutionResults(p.ID, results)
+	err := SendExecutionResults(p.ID, results, pipelineStartTime, pipelineEndTime)
 	if err != nil {
 		return fmt.Errorf("error sending execution results: %w", err)
 	}
@@ -99,14 +143,20 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 	return nil
 }
 
-func SendExecutionResults(pipelineID string, results map[string]interface{}) error {
+func SendExecutionResults(pipelineID string, results map[string]interface{}, startTime, endTime int64) error {
 	cfg := config.Load()
 
     apiEndpoint := fmt.Sprintf("%s/pipeline/%s/execution-result", cfg.APIEndpoint, pipelineID)
 
-    jsonData, err := json.Marshal(map[string]interface{}{
+	executionData := map[string]interface{}{
+        "pipeline_id": pipelineID,
+        "start_time": startTime,
+        "end_time": endTime,
         "step_results": results,
-    })
+    }
+
+    jsonData, err := json.Marshal(executionData)
+
     if err != nil {
         return fmt.Errorf("error marshaling results: %w", err)
     }
