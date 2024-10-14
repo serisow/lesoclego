@@ -106,7 +106,6 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 
 		err = step.Execute(ctx, p.Context)
 		stepEndTime := time.Now().Unix()
-		stepDuration := stepEndTime - stepStartTime
 
 		output, _ := p.Context.GetStepOutput(pipelineStep.StepOutputKey)
 		stepResult := map[string]interface{}{
@@ -115,7 +114,6 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 			"status":           "completed",
 			"start_time":       stepStartTime,
 			"end_time":         stepEndTime,
-			"duration":         stepDuration,
 			"step_type":        pipelineStep.Type,
 			"sequence":         pipelineStep.Weight,
 			"data":             output,
