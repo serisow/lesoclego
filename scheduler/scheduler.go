@@ -16,6 +16,8 @@ type Scheduler struct {
 	apiEndpoint   string
 	checkInterval time.Duration
 	registry      *pipeline.PluginRegistry
+	fetchPipelineFunc  func(id, apiEndpoint string) (pipeline.Pipeline, error)
+    executePipelineFunc func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error
 }
 
 type ScheduledPipeline struct {
@@ -38,6 +40,8 @@ func New(apiEndpoint string, checkInterval time.Duration, registry *pipeline.Plu
 		apiEndpoint:   apiEndpoint,
 		checkInterval: checkInterval,
 		registry:      registry,
+		fetchPipelineFunc:  fetchFullPipeline,
+        executePipelineFunc: pipeline.ExecutePipeline,
 	}
 }
 
@@ -91,27 +95,34 @@ func (s *Scheduler) executePipeline(pipelineID string) {
     }
     defer runningPipelines.Delete(pipelineID)
 
-    fullPipeline, err := s.fetchFullPipeline(pipelineID)
+    fullPipeline, err := s.fetchPipelineFunc(pipelineID, s.apiEndpoint)
     if err != nil {
         log.Printf("Error fetching full pipeline %s: %v", pipelineID, err)
         return
     }
 
-    err = pipeline.ExecutePipeline(&fullPipeline, s.registry)
-    if err != nil {
+    // Use injected execute function
+    err = s.executePipelineFunc(&fullPipeline, s.registry)
+	if err != nil {
         log.Printf("Error executing pipeline %s: %v", pipelineID, err)
     } else {
         log.Printf("Successfully executed pipeline %s", pipelineID)
     }
 }
 
-func (s *Scheduler) fetchFullPipeline(id string) (pipeline.Pipeline, error) {
-    url := fmt.Sprintf("%s/%s/%s", s.apiEndpoint, "pipelines", id)
+func fetchFullPipeline(id, apiEndpoint string) (pipeline.Pipeline, error) {
+    url := fmt.Sprintf("%s/%s/%s", apiEndpoint, "pipelines", id)
     resp, err := http.Get(url)
     if err != nil {
         return pipeline.Pipeline{}, fmt.Errorf("HTTP GET request failed: %v", err)
     }
     defer resp.Body.Close()
+
+    // Check for non-200 status codes
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body) // Read body to include in error message
+        return pipeline.Pipeline{}, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, string(body))
+    }
 
     body, err := io.ReadAll(resp.Body)
     if err != nil {

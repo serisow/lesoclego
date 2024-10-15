@@ -1,29 +1,18 @@
 package scheduler
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/serisow/lesocle/pipeline"
 )
 
-/*
-Scheduling System Limitations and User Responsibilities
-
-This scheduling system does not automatically adjust for Daylight Saving Time (DST)
-transitions or leap year peculiarities. Users are responsible for:
-
-1. Adjusting pipeline schedules around DST changes in their respective time zones.
-2. Handling February 29th schedules in leap years if needed.
-3. Setting critical job schedules at hours not typically affected by DST (e.g., 11:00 AM).
-
-The system operates on the time provided without applying time zone conversions or DST
-adjustments. All times are treated as specified in the user's local time zone.
-
-These tests ensure the system behaves correctly given these limitations and user
-responsibilities. For detailed guidelines, refer to the user documentation.
-*/
 
 func TestShouldRun(t *testing.T) {
 	tests := []struct {
@@ -291,3 +280,258 @@ func TestFetchScheduledPipelines(t *testing.T) {
 	}
 }
 
+
+func TestExecutePipeline(t *testing.T) {
+    var wg sync.WaitGroup
+    wg.Add(1)
+
+    // Mock fetchFullPipeline function
+    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline.Pipeline, error) {
+        // Verify that the correct pipeline ID is requested
+        if id != "test-pipeline" {
+            t.Errorf("Expected pipeline ID 'test-pipeline', got '%s'", id)
+        }
+        // Return a mock pipeline
+        return pipeline.Pipeline{
+            ID:    "test-pipeline",
+            Label: "Test Pipeline",
+            Steps: []pipeline.PipelineStep{
+                {
+                    ID:   "step1",
+                    Type: "mock_step",
+                },
+            },
+            Context: pipeline.NewContext(),
+        }, nil
+    }
+
+    // Mock executePipelineFunc function
+    mockExecutePipelineFunc := func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error {
+        defer wg.Done()
+        // Verify that the pipeline is as expected
+        if p.ID != "test-pipeline" {
+            t.Errorf("Expected pipeline ID 'test-pipeline', got '%s'", p.ID)
+        }
+        // Simulate execution
+        return nil
+    }
+
+    // Create a scheduler with the mock functions
+    s := &Scheduler{
+        fetchPipelineFunc:   mockFetchFullPipeline,
+        executePipelineFunc: mockExecutePipelineFunc,
+    }
+
+    // Ensure runningPipelines map is empty before the test
+    runningPipelines = sync.Map{}
+
+    // Execute the pipeline
+    s.executePipeline("test-pipeline")
+
+    // Wait for the pipeline execution to finish
+    done := make(chan struct{})
+    go func() {
+        wg.Wait()
+        close(done)
+    }()
+
+    select {
+    case <-done:
+        // Test passed
+    case <-time.After(1 * time.Second):
+        t.Fatal("Test timed out waiting for pipeline execution")
+    }
+
+    // Verify that the pipeline was removed from runningPipelines
+    _, exists := runningPipelines.Load("test-pipeline")
+    if exists {
+        t.Errorf("Pipeline 'test-pipeline' should have been removed from runningPipelines")
+    }
+}
+
+
+func TestExecutePipelineConcurrency(t *testing.T) {
+    var executionCount int32
+
+    // Mock functions
+    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline.Pipeline, error) {
+        return pipeline.Pipeline{ID: id}, nil
+    }
+
+    mockExecutePipelineFunc := func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error {
+        atomic.AddInt32(&executionCount, 1)
+        time.Sleep(100 * time.Millisecond) // Simulate some work
+        return nil
+    }
+
+    // Create scheduler with mock functions
+    s := &Scheduler{
+        fetchPipelineFunc:   mockFetchFullPipeline,
+        executePipelineFunc: mockExecutePipelineFunc,
+    }
+
+    // Ensure runningPipelines map is empty before the test
+    runningPipelines = sync.Map{}
+
+    // Attempt to execute the same pipeline multiple times concurrently
+    for i := 0; i < 5; i++ {
+        go s.executePipeline("test-pipeline")
+    }
+
+    // Wait for a short period to allow executions to occur
+    time.Sleep(500 * time.Millisecond)
+
+    // Check that executionCount is 1
+    if executionCount != 1 {
+        t.Errorf("Expected executionCount to be 1, got %d", executionCount)
+    }
+}
+
+func TestExecutePipelineFetchError(t *testing.T) {
+    // Mock fetch function that returns an error
+    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline.Pipeline, error) {
+        return pipeline.Pipeline{}, fmt.Errorf("fetch error")
+    }
+
+    // Mock execute function (should not be called)
+    mockExecutePipelineFunc := func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error {
+        t.Fatal("executePipelineFunc should not be called when fetch fails")
+        return nil
+    }
+
+    s := &Scheduler{
+        fetchPipelineFunc:   mockFetchFullPipeline,
+        executePipelineFunc: mockExecutePipelineFunc,
+    }
+
+    s.executePipeline("test-pipeline")
+}
+
+func TestExecutePipelineExecutionError(t *testing.T) {
+    // Mock fetch function
+    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline.Pipeline, error) {
+        return pipeline.Pipeline{ID: id}, nil
+    }
+
+    // Mock execute function that returns an error
+    mockExecutePipelineFunc := func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error {
+        return fmt.Errorf("execution error")
+    }
+
+    s := &Scheduler{
+        fetchPipelineFunc:   mockFetchFullPipeline,
+        executePipelineFunc: mockExecutePipelineFunc,
+    }
+
+    s.executePipeline("test-pipeline")
+}
+
+func TestFetchFullPipeline(t *testing.T) {
+    // Test cases
+    tests := []struct {
+        name           string
+        pipelineID     string
+        responseStatus int
+        responseBody   string
+        expectError    bool
+        errorMsg       string
+    }{
+        {
+            name:           "Successful Fetch",
+            pipelineID:     "test-pipeline",
+            responseStatus: http.StatusOK,
+            responseBody: `{
+                "id": "test-pipeline",
+                "label": "Test Pipeline",
+                "steps": [
+                    {
+                        "id": "step1",
+                        "type": "mock_step"
+                    }
+                ]
+            }`,
+            expectError: false,
+        },
+        {
+            name:           "HTTP 404 Not Found",
+            pipelineID:     "nonexistent-pipeline",
+            responseStatus: http.StatusNotFound,
+            responseBody:   "Not Found",
+            expectError:    true,
+            errorMsg:       "HTTP request failed with status 404",
+        },
+        {
+            name:           "Malformed JSON",
+            pipelineID:     "malformed-pipeline",
+            responseStatus: http.StatusOK,
+            responseBody:   `{"id": "malformed-pipeline", "label": "Test Pipeline", "steps": [`,
+            expectError:    true,
+            errorMsg:       "failed to unmarshal JSON",
+        },
+        {
+            name:           "Network Error",
+            pipelineID:     "network-error-pipeline",
+            responseStatus: http.StatusOK,
+            responseBody:   "",
+            expectError:    true,
+            errorMsg:       "HTTP GET request failed",
+        },
+    }
+
+    for _, tc := range tests {
+        t.Run(tc.name, func(t *testing.T) {
+            // Setup mock server
+            mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+                expectedPath := fmt.Sprintf("/pipelines/%s", tc.pipelineID)
+                if r.URL.Path != expectedPath {
+                    t.Errorf("Expected request to %s, got %s", expectedPath, r.URL.Path)
+                }
+
+                // Simulate network error by closing the connection abruptly
+                if tc.name == "Network Error" {
+                    conn, _, err := w.(http.Hijacker).Hijack()
+                    if err != nil {
+                        t.Fatalf("Failed to hijack connection: %v", err)
+                    }
+                    conn.Close()
+                    return
+                }
+
+                w.WriteHeader(tc.responseStatus)
+                _, _ = w.Write([]byte(tc.responseBody))
+            }))
+            defer mockServer.Close()
+
+            // Call the function under test
+            p, err := fetchFullPipeline(tc.pipelineID, mockServer.URL)
+
+            if tc.expectError {
+                if err == nil {
+                    t.Fatalf("Expected an error but got none")
+                }
+                if !contains(err.Error(), tc.errorMsg) {
+                    t.Errorf("Expected error message to contain '%s', got '%s'", tc.errorMsg, err.Error())
+                }
+                return
+            }
+
+            if err != nil {
+                t.Fatalf("Unexpected error: %v", err)
+            }
+
+            // Verify the Pipeline object
+            if p.ID != tc.pipelineID {
+                t.Errorf("Expected pipeline ID '%s', got '%s'", tc.pipelineID, p.ID)
+            }
+            if p.Context == nil {
+                t.Errorf("Expected pipeline context to be initialized")
+            }
+            // Additional checks can be added here for other fields
+        })
+    }
+}
+
+// Helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+    return strings.Contains(s, substr)
+}
