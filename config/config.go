@@ -23,10 +23,15 @@ type Config struct {
 	GoogleCustomSearchEngineID string
 }
 
+var isTest bool
+
 func init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	isTest = os.Getenv("GO_ENVIRONMENT") == "test"
+	if !isTest {
+		err := godotenv.Load()
+		if err != nil {
+			log.Println("Warning: Error loading .env file:", err)
+		}
 	}
 }
 
