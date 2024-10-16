@@ -10,14 +10,15 @@ import (
 
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
+	"github.com/serisow/lesocle/llm_step"
+	"github.com/serisow/lesocle/pipeline/step"
 	"github.com/serisow/lesocle/pipeline_type"
 	"github.com/serisow/lesocle/plugin_registry"
-	"github.com/serisow/lesocle/step"
 )
 
 
 
-var sendExecutionResultsFunc = SendExecutionResults
+var SendExecutionResultsFunc = SendExecutionResults
 
 func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
 	ctx := context.Background()
@@ -37,7 +38,7 @@ func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.Plugin
 
 		switch pipelineStep.Type {
 		case "llm_step":
-			llmStep := &LLMStepImpl{PipelineStep: pipelineStep}
+			llmStep := &llm_step.LLMStepImpl{PipelineStep: pipelineStep}
 
 			serviceName, ok := pipelineStep.LLMServiceConfig["service_name"].(string)
 			if !ok {
@@ -101,7 +102,7 @@ func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.Plugin
 	pipelineEndTime := time.Now().Unix()
 
 	// Send execution results to Drupal
-	err := sendExecutionResultsFunc(p.ID, results, pipelineStartTime, pipelineEndTime)
+	err := SendExecutionResultsFunc(p.ID, results, pipelineStartTime, pipelineEndTime)
 	if err != nil {
 		return fmt.Errorf("error sending execution results: %w", err)
 	}

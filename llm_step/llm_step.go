@@ -1,11 +1,11 @@
-package pipeline
+package llm_step
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/serisow/lesocle/llm_service"
+	"github.com/serisow/lesocle/services/llm_service"
 	"github.com/serisow/lesocle/pipeline_type"
 )
 

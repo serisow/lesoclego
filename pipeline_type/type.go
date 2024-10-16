@@ -1,6 +1,6 @@
 package pipeline_type
 
-import "github.com/serisow/lesocle/llm_service"
+import "github.com/serisow/lesocle/services/llm_service"
 
 // Used essentially to detect if pipeline might run, so we fetch minimal data
 type ScheduledPipeline struct {

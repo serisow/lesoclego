@@ -1,6 +1,4 @@
-// pipeline/llm_step_test.go
-
-package pipeline
+package llm_step_test
 
 import (
 	"context"
@@ -8,9 +6,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/serisow/lesocle/llm_service"
+	"github.com/serisow/lesocle/llm_step"
+	"github.com/serisow/lesocle/pipeline"
 	"github.com/serisow/lesocle/pipeline_type"
 	"github.com/serisow/lesocle/plugin_registry"
+	"github.com/serisow/lesocle/services/llm_service"
 )
 
 func TestLLMStepImpl_Execute(t *testing.T) {
@@ -92,7 +92,7 @@ func TestLLMStepImpl_Execute(t *testing.T) {
             }
 
             // Initialize the LLMStepImpl with the mock service
-            llmStep := &LLMStepImpl{
+            llmStep := &llm_step.LLMStepImpl{
                 PipelineStep:       tt.pipelineStep,
                 LLMServiceInstance: mockLLMService,
             }
@@ -126,9 +126,9 @@ func TestPipelineWithLLMStep(t *testing.T) {
     os.Setenv("GO_ENVIRONMENT", "test")
 
     // Mock SendExecutionResults
-    originalSendExecutionResultsFunc := sendExecutionResultsFunc
-    defer func() { sendExecutionResultsFunc = originalSendExecutionResultsFunc }()
-    sendExecutionResultsFunc = func(pipelineID string, results map[string]interface{}, startTime, endTime int64) error {
+    originalSendExecutionResultsFunc := pipeline.SendExecutionResultsFunc
+    defer func() { pipeline.SendExecutionResultsFunc = originalSendExecutionResultsFunc }()
+    pipeline.SendExecutionResultsFunc = func(pipelineID string, results map[string]interface{}, startTime, endTime int64) error {
         // Do nothing
         return nil
     }
@@ -170,7 +170,7 @@ func TestPipelineWithLLMStep(t *testing.T) {
     }
 
     // Execute pipeline
-    err := ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline(p, registry)
     if err != nil {
         t.Fatalf("Pipeline execution failed: %v", err)
     }

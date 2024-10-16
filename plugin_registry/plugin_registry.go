@@ -3,9 +3,9 @@ package plugin_registry
 import (
 	"fmt"
 
-	"github.com/serisow/lesocle/action_service"
-	"github.com/serisow/lesocle/llm_service"
-	"github.com/serisow/lesocle/step"
+	"github.com/serisow/lesocle/services/action_service"
+	"github.com/serisow/lesocle/services/llm_service"
+	"github.com/serisow/lesocle/pipeline/step"
 )
 
 type PluginRegistry struct {

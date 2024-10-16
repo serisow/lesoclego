@@ -7,15 +7,16 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/serisow/lesocle/action_service"
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
-	"github.com/serisow/lesocle/llm_service"
+	"github.com/serisow/lesocle/llm_step"
 	"github.com/serisow/lesocle/pipeline"
+	"github.com/serisow/lesocle/pipeline/step"
 	"github.com/serisow/lesocle/plugin_registry"
 	"github.com/serisow/lesocle/scheduler"
 	"github.com/serisow/lesocle/server"
-	"github.com/serisow/lesocle/step"
+	"github.com/serisow/lesocle/services/action_service"
+	"github.com/serisow/lesocle/services/llm_service"
 
 	"github.com/urfave/negroni"
 )
@@ -67,7 +68,7 @@ func setupNegroni(r *mux.Router) *negroni.Negroni {
 func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Logger) {
 	// Register the Step Types
 	registry.RegisterStepType("llm_step", func() step.Step {
-		return &pipeline.LLMStepImpl{
+		return &llm_step.LLMStepImpl{
 			LLMServiceInstance: nil, // This will be set later based on configuration
 		}
 	})

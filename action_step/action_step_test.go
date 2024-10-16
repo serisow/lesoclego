@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/serisow/lesocle/action_service"
+	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/pipeline_type"
 	"github.com/serisow/lesocle/plugin_registry"
 )

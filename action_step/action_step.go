@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/serisow/lesocle/action_service"
+	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/pipeline_type"
 )
 
