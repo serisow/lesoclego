@@ -3,19 +3,21 @@
 package pipeline
 
 import (
-    "context"
-    "errors"
-    "os"
-    "testing"
+	"context"
+	"errors"
+	"os"
+	"testing"
 
-    "github.com/serisow/lesocle/pipeline/llm_service"
+	"github.com/serisow/lesocle/llm_service"
+	"github.com/serisow/lesocle/pipeline_type"
+	"github.com/serisow/lesocle/plugin_registry"
 )
 
 func TestLLMStepImpl_Execute(t *testing.T) {
     tests := []struct {
         name             string
-        pipelineStep     PipelineStep
-        pipelineContext  *Context
+        pipelineStep     pipeline_type.PipelineStep
+        pipelineContext  *pipeline_type.Context
         mockLLMResponse  string
         mockLLMError     error
         expectedError    bool
@@ -23,7 +25,7 @@ func TestLLMStepImpl_Execute(t *testing.T) {
     }{
         {
             name: "Successful execution with prompt placeholders",
-            pipelineStep: PipelineStep{
+            pipelineStep: pipeline_type.PipelineStep{
                 ID:            "llm_step_1",
                 Type:          "llm_step",
                 Prompt:        "Generate a summary for: {previous_step}",
@@ -33,7 +35,7 @@ func TestLLMStepImpl_Execute(t *testing.T) {
                     "service_name": "mock_service",
                 },
             },
-            pipelineContext: &Context{
+            pipelineContext: &pipeline_type.Context{
                 StepOutputs: map[string]interface{}{
                     "previous_step": "This is the content to summarize.",
                 },
@@ -43,7 +45,7 @@ func TestLLMStepImpl_Execute(t *testing.T) {
         },
         {
             name: "LLM service returns an error",
-            pipelineStep: PipelineStep{
+            pipelineStep: pipeline_type.PipelineStep{
                 ID:            "llm_step_2",
                 Type:          "llm_step",
                 Prompt:        "Generate a summary.",
@@ -52,7 +54,7 @@ func TestLLMStepImpl_Execute(t *testing.T) {
                     "service_name": "mock_service",
                 },
             },
-            pipelineContext: &Context{
+            pipelineContext: &pipeline_type.Context{
                 StepOutputs: make(map[string]interface{}),
             },
             mockLLMError:  errors.New("LLM service error"),
@@ -60,7 +62,7 @@ func TestLLMStepImpl_Execute(t *testing.T) {
         },
         {
             name: "Required step output missing",
-            pipelineStep: PipelineStep{
+            pipelineStep: pipeline_type.PipelineStep{
                 ID:            "llm_step_3",
                 Type:          "llm_step",
                 Prompt:        "Use the output from {missing_step}.",
@@ -70,7 +72,7 @@ func TestLLMStepImpl_Execute(t *testing.T) {
                     "service_name": "mock_service",
                 },
             },
-            pipelineContext: &Context{
+            pipelineContext: &pipeline_type.Context{
                 StepOutputs: make(map[string]interface{}),
             },
             expectedError: true,
@@ -139,11 +141,11 @@ func TestPipelineWithLLMStep(t *testing.T) {
     }
 
     // Setup plugin registry with mock LLM service
-    registry := NewPluginRegistry()
+    registry := plugin_registry.NewPluginRegistry()
     registry.RegisterLLMService("mock_service", mockLLMService)
 
     // Define pipeline steps
-    steps := []PipelineStep{
+    steps := []pipeline_type.PipelineStep{
         {
             ID:            "step1",
             Type:          "llm_step",
@@ -157,11 +159,11 @@ func TestPipelineWithLLMStep(t *testing.T) {
     }
 
     // Initialize pipeline context with required step outputs
-    ctx := NewContext()
+    ctx := pipeline_type.NewContext()
     ctx.SetStepOutput("name", "World")
 
     // Create pipeline
-    p := &Pipeline{
+    p := &pipeline_type.Pipeline{
         ID:      "test_pipeline",
         Steps:   steps,
         Context: ctx,

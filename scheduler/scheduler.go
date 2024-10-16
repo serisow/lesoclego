@@ -10,14 +10,16 @@ import (
 	"time"
 
 	"github.com/serisow/lesocle/pipeline"
+	"github.com/serisow/lesocle/pipeline_type"
+	"github.com/serisow/lesocle/plugin_registry"
 )
 
 type Scheduler struct {
 	apiEndpoint   string
 	checkInterval time.Duration
-	registry      *pipeline.PluginRegistry
-	fetchPipelineFunc  func(id, apiEndpoint string) (pipeline.Pipeline, error)
-    executePipelineFunc func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error
+	registry      *plugin_registry.PluginRegistry
+	fetchPipelineFunc  func(id, apiEndpoint string) (pipeline_type.Pipeline, error)
+    executePipelineFunc func(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error
 }
 
 type ScheduledPipeline struct {
@@ -35,7 +37,7 @@ type ScheduledPipeline struct {
 // Solve potential data race.
 var runningPipelines sync.Map
 
-func New(apiEndpoint string, checkInterval time.Duration, registry *pipeline.PluginRegistry) *Scheduler {
+func New(apiEndpoint string, checkInterval time.Duration, registry *plugin_registry.PluginRegistry) *Scheduler {
 	return &Scheduler{
 		apiEndpoint:   apiEndpoint,
 		checkInterval: checkInterval,
@@ -110,31 +112,31 @@ func (s *Scheduler) executePipeline(pipelineID string) {
     }
 }
 
-func fetchFullPipeline(id, apiEndpoint string) (pipeline.Pipeline, error) {
+func fetchFullPipeline(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
     url := fmt.Sprintf("%s/%s/%s", apiEndpoint, "pipelines", id)
     resp, err := http.Get(url)
     if err != nil {
-        return pipeline.Pipeline{}, fmt.Errorf("HTTP GET request failed: %v", err)
+        return pipeline_type.Pipeline{}, fmt.Errorf("HTTP GET request failed: %v", err)
     }
     defer resp.Body.Close()
 
     // Check for non-200 status codes
     if resp.StatusCode != http.StatusOK {
         body, _ := io.ReadAll(resp.Body) // Read body to include in error message
-        return pipeline.Pipeline{}, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, string(body))
+        return pipeline_type.Pipeline{}, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, string(body))
     }
 
     body, err := io.ReadAll(resp.Body)
     if err != nil {
-        return pipeline.Pipeline{}, fmt.Errorf("failed to read response body: %v", err)
+        return pipeline_type.Pipeline{}, fmt.Errorf("failed to read response body: %v", err)
     }
 
-    var p pipeline.Pipeline
+    var p pipeline_type.Pipeline
     err = json.Unmarshal(body, &p)
     if err != nil {
         return p, fmt.Errorf("failed to unmarshal JSON: %v", err)
     }
-    p.Context = pipeline.NewContext()
+    p.Context = pipeline_type.NewContext()
     return p, nil
 }
 

@@ -8,17 +8,18 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
 	"github.com/PuerkitoBio/goquery"
 
-
 	"github.com/serisow/lesocle/config"
+	"github.com/serisow/lesocle/pipeline_type"
 )
 
 type GoogleSearchStepImpl struct {
-    PipelineStep
+    pipeline_type.PipelineStep
 }
 
-func (s *GoogleSearchStepImpl) Execute(ctx context.Context, pipelineContext *Context) error {
+func (s *GoogleSearchStepImpl) Execute(ctx context.Context, pipelineContext *pipeline_type.Context) error {
     if s.GoogleSearchConfig == nil {
         return fmt.Errorf("google search configuration is missing")
     }

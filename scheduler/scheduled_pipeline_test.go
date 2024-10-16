@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/serisow/lesocle/pipeline"
+	"github.com/serisow/lesocle/pipeline_type"
+	"github.com/serisow/lesocle/plugin_registry"
 )
 
 
@@ -286,27 +287,27 @@ func TestExecutePipeline(t *testing.T) {
     wg.Add(1)
 
     // Mock fetchFullPipeline function
-    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline.Pipeline, error) {
+    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
         // Verify that the correct pipeline ID is requested
         if id != "test-pipeline" {
             t.Errorf("Expected pipeline ID 'test-pipeline', got '%s'", id)
         }
         // Return a mock pipeline
-        return pipeline.Pipeline{
+        return pipeline_type.Pipeline{
             ID:    "test-pipeline",
             Label: "Test Pipeline",
-            Steps: []pipeline.PipelineStep{
+            Steps: []pipeline_type.PipelineStep{
                 {
                     ID:   "step1",
                     Type: "mock_step",
                 },
             },
-            Context: pipeline.NewContext(),
+            Context: pipeline_type.NewContext(),
         }, nil
     }
 
     // Mock executePipelineFunc function
-    mockExecutePipelineFunc := func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error {
+    mockExecutePipelineFunc := func(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
         defer wg.Done()
         // Verify that the pipeline is as expected
         if p.ID != "test-pipeline" {
@@ -354,11 +355,11 @@ func TestExecutePipelineConcurrency(t *testing.T) {
     var executionCount int32
 
     // Mock functions
-    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline.Pipeline, error) {
-        return pipeline.Pipeline{ID: id}, nil
+    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
+        return pipeline_type.Pipeline{ID: id}, nil
     }
 
-    mockExecutePipelineFunc := func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error {
+    mockExecutePipelineFunc := func(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
         atomic.AddInt32(&executionCount, 1)
         time.Sleep(100 * time.Millisecond) // Simulate some work
         return nil
@@ -389,12 +390,12 @@ func TestExecutePipelineConcurrency(t *testing.T) {
 
 func TestExecutePipelineFetchError(t *testing.T) {
     // Mock fetch function that returns an error
-    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline.Pipeline, error) {
-        return pipeline.Pipeline{}, fmt.Errorf("fetch error")
+    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
+        return pipeline_type.Pipeline{}, fmt.Errorf("fetch error")
     }
 
     // Mock execute function (should not be called)
-    mockExecutePipelineFunc := func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error {
+    mockExecutePipelineFunc := func(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
         t.Fatal("executePipelineFunc should not be called when fetch fails")
         return nil
     }
@@ -409,12 +410,12 @@ func TestExecutePipelineFetchError(t *testing.T) {
 
 func TestExecutePipelineExecutionError(t *testing.T) {
     // Mock fetch function
-    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline.Pipeline, error) {
-        return pipeline.Pipeline{ID: id}, nil
+    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
+        return pipeline_type.Pipeline{ID: id}, nil
     }
 
     // Mock execute function that returns an error
-    mockExecutePipelineFunc := func(p *pipeline.Pipeline, registry *pipeline.PluginRegistry) error {
+    mockExecutePipelineFunc := func(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
         return fmt.Errorf("execution error")
     }
 

@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/serisow/lesocle/pipeline/llm_service"
+	"github.com/serisow/lesocle/llm_service"
+	"github.com/serisow/lesocle/pipeline_type"
 )
 
 type LLMStepImpl struct {
-	PipelineStep
+	pipeline_type.PipelineStep
 	LLMServiceInstance llm_service.LLMService
 }
 
-func (s *LLMStepImpl) Execute(ctx context.Context, pipelineContext *Context) error {
+func (s *LLMStepImpl) Execute(ctx context.Context, pipelineContext *pipeline_type.Context) error {
     // Split required steps
     requiredSteps := strings.Split(s.RequiredSteps, "\r\n")
 

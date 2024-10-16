@@ -8,67 +8,21 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
-	"github.com/serisow/lesocle/pipeline/llm_service"
+	"github.com/serisow/lesocle/pipeline_type"
+	"github.com/serisow/lesocle/plugin_registry"
+	"github.com/serisow/lesocle/step"
 )
 
-// Used essentially to detect if pipeline might run, so we fetch minimal data
-type ScheduledPipeline struct {
-	ID            string `json:"id"`
-	Label         string `json:"label"`
-	ScheduledTime int64  `json:"scheduled_time"`
-}
 
-// The full pipeline data
-type Pipeline struct {
-	ID            string         `json:"id"`
-	Label         string         `json:"label"`
-	Steps         []PipelineStep `json:"steps"`
-	ScheduledTime int64          `json:"scheduled_time"`
-	LLMServices   map[string]llm_service.LLMService
-	Context       *Context
-}
-
-type PipelineStep struct {
-	ID               string                 `json:"id"`
-	Type             string                 `json:"type"`
-	Weight           int                    `json:"weight"`
-	StepDescription  string                 `json:"step_description"`
-	StepOutputKey    string                 `json:"step_output_key"`
-	OutputType       string                 `json:"output_type"`
-    RequiredSteps    string                 `json:"required_steps"`
-	LLMConfig        string                 `json:"llm_config,omitempty"`
-	Prompt           string                 `json:"prompt,omitempty"`
-	Response         string                 `json:"response,omitempty"`
-	UUID             string                 `json:"uuid"`
-	LLMServiceConfig map[string]interface{} `json:"llm_service,omitempty"`
-	ActionConfig     string                 `json:"action_config,omitempty"`
-	GoogleSearchConfig *GoogleSearchConfig   `json:"google_search_config,omitempty"`
-}
-
-type GoogleSearchConfig struct {
-    Query          string             `json:"query"`
-    Category       string             `json:"category"`
-    AdvancedParams GoogleSearchParams `json:"advanced_params"`
-}
-
-type GoogleSearchParams struct {
-    NumResults   string `json:"num_results"`
-    DateRestrict string `json:"date_restrict"`
-    Sort         string `json:"sort"`
-    Language     string `json:"language"`
-    Country      string `json:"country"`
-    SiteSearch   string `json:"site_search"`
-    FileType     string `json:"file_type"`
-    SafeSearch   string `json:"safe_search"`
-}
 
 var sendExecutionResultsFunc = SendExecutionResults
 
-func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
+func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
 	ctx := context.Background()
     if p.Context == nil {
-        p.Context = NewContext()
+        p.Context = pipeline_type.NewContext()
     }
 
 	results := make(map[string]interface{})
@@ -78,7 +32,7 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 	for _, pipelineStep := range p.Steps {
 		stepStartTime := time.Now().Unix()
 
-		var step Step
+		var step step.Step
 		var err error
 
 		switch pipelineStep.Type {
@@ -99,7 +53,7 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 			step = llmStep
 
 		case "action_step":
-            actionStep := &ActionStepImpl{PipelineStep: pipelineStep}
+            actionStep := &action_step.ActionStepImpl{PipelineStep: pipelineStep}
 
             // Assume ActionConfig contains the action service name
             actionServiceName := pipelineStep.ActionConfig
@@ -111,7 +65,7 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 
             actionStep.ActionServiceInstance = actionServiceInstance
             step = actionStep
-			
+
 		case "google_search":
             step = &GoogleSearchStepImpl{PipelineStep: pipelineStep}
 		default:
