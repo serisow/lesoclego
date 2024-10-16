@@ -10,16 +10,16 @@ import (
 )
 
 type LLMStepImpl struct {
-	pipeline_type.PipelineStep
+    PipelineStep       pipeline_type.PipelineStep
 	LLMServiceInstance llm_service.LLMService
 }
 
 func (s *LLMStepImpl) Execute(ctx context.Context, pipelineContext *pipeline_type.Context) error {
     // Split required steps
-    requiredSteps := strings.Split(s.RequiredSteps, "\r\n")
+    requiredSteps := strings.Split(s.PipelineStep.RequiredSteps, "\r\n")
 
     // Replace placeholders in the prompt with previous step outputs
-    prompt := s.Prompt
+    prompt := s.PipelineStep.Prompt
     for _, requiredStep := range requiredSteps {
         requiredStep = strings.TrimSpace(requiredStep)
         if requiredStep == "" {
@@ -34,17 +34,17 @@ func (s *LLMStepImpl) Execute(ctx context.Context, pipelineContext *pipeline_typ
     }
 	// Ensure LLMService is not nil
 	if s.LLMServiceInstance == nil {
-		return fmt.Errorf("LLMService is not initialized for step %s", s.ID)
+		return fmt.Errorf("LLMService is not initialized for step %s", s.PipelineStep.ID)
 	}
 
 	// Call the LLM service
-	result, err := s.LLMServiceInstance.CallLLM(ctx, s.LLMServiceConfig, prompt)
+	result, err := s.LLMServiceInstance.CallLLM(ctx, s.PipelineStep.LLMServiceConfig, prompt)
 	if err != nil {
-		return fmt.Errorf("error calling LLM service for step %s: %w", s.ID, err)
+		return fmt.Errorf("error calling LLM service for step %s: %w", s.PipelineStep.ID, err)
 	}
 
-    if s.StepOutputKey != "" {
-        pipelineContext.SetStepOutput(s.StepOutputKey, result)
+    if s.PipelineStep.StepOutputKey != "" {
+        pipelineContext.SetStepOutput(s.PipelineStep.StepOutputKey, result)
     }
 	return nil
 }

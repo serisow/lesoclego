@@ -6,8 +6,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/llm_step"
 	"github.com/serisow/lesocle/pipeline"
+	"github.com/serisow/lesocle/pipeline/step"
 	"github.com/serisow/lesocle/pipeline_type"
 	"github.com/serisow/lesocle/plugin_registry"
 	"github.com/serisow/lesocle/services/llm_service"
@@ -143,6 +145,16 @@ func TestPipelineWithLLMStep(t *testing.T) {
     // Setup plugin registry with mock LLM service
     registry := plugin_registry.NewPluginRegistry()
     registry.RegisterLLMService("mock_service", mockLLMService)
+    	// Register llm_step
+	registry.RegisterStepType("llm_step", func() step.Step {
+		return &llm_step.LLMStepImpl{}
+	})
+
+	// Register action_step
+	registry.RegisterStepType("action_step", func() step.Step {
+		return &action_step.ActionStepImpl{}
+	})
+
 
     // Define pipeline steps
     steps := []pipeline_type.PipelineStep{

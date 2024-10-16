@@ -10,10 +10,10 @@ import (
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
 	"github.com/serisow/lesocle/llm_step"
-	"github.com/serisow/lesocle/pipeline"
 	"github.com/serisow/lesocle/pipeline/step"
 	"github.com/serisow/lesocle/plugin_registry"
 	"github.com/serisow/lesocle/scheduler"
+	"github.com/serisow/lesocle/search_step"
 	"github.com/serisow/lesocle/server"
 	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/llm_service"
@@ -76,7 +76,7 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 		return &action_step.ActionStepImpl{}
 	})
 	registry.RegisterStepType("google_search", func() step.Step {
-        return &pipeline.GoogleSearchStepImpl{}
+        return &search_step.GoogleSearchStepImpl{}
     })
 
 	// Register the LLM Services

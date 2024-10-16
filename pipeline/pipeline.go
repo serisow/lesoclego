@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
 	"github.com/serisow/lesocle/llm_step"
-	"github.com/serisow/lesocle/pipeline/step"
 	"github.com/serisow/lesocle/pipeline_type"
 	"github.com/serisow/lesocle/plugin_registry"
 )
@@ -21,57 +21,52 @@ import (
 var SendExecutionResultsFunc = SendExecutionResults
 
 func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
-	ctx := context.Background()
+    ctx := context.Background()
     if p.Context == nil {
         p.Context = pipeline_type.NewContext()
     }
 
-	results := make(map[string]interface{})
-	pipelineStartTime := time.Now().Unix()
+    results := make(map[string]interface{})
+    pipelineStartTime := time.Now().Unix()
 
+    for _, pipelineStep := range p.Steps {
+        stepStartTime := time.Now().Unix()
 
-	for _, pipelineStep := range p.Steps {
-		stepStartTime := time.Now().Unix()
+        // Get the step instance from the registry
+        step, err := registry.GetStepInstance(pipelineStep.Type)
+        if err != nil {
+            return fmt.Errorf("unknown step type: %s", pipelineStep.Type)
+        }
 
-		var step step.Step
-		var err error
-
-		switch pipelineStep.Type {
-		case "llm_step":
-			llmStep := &llm_step.LLMStepImpl{PipelineStep: pipelineStep}
-
-			serviceName, ok := pipelineStep.LLMServiceConfig["service_name"].(string)
-			if !ok {
-				return fmt.Errorf("service_name not found in llm_service configuration for step %s", pipelineStep.ID)
-			}
-
-			llmServiceInstance, ok := registry.GetLLMService(serviceName)
-			if !ok {
-				return fmt.Errorf("unknown LLM service: %s", serviceName)
-			}
-
-			llmStep.LLMServiceInstance = llmServiceInstance
-			step = llmStep
-
-		case "action_step":
-            actionStep := &action_step.ActionStepImpl{PipelineStep: pipelineStep}
-
-            // Assume ActionConfig contains the action service name
+        // Set the PipelineStep field directly
+        switch s := step.(type) {
+        case *llm_step.LLMStepImpl:
+            s.PipelineStep = pipelineStep
+            // Additional setup for LLM service
+            serviceName, ok := pipelineStep.LLMServiceConfig["service_name"].(string)
+            if !ok {
+                return fmt.Errorf("service_name not found in llm_service configuration for step %s", pipelineStep.ID)
+            }
+            llmServiceInstance, ok := registry.GetLLMService(serviceName)
+            if !ok {
+                return fmt.Errorf("unknown LLM service: %s", serviceName)
+            }
+            s.LLMServiceInstance = llmServiceInstance
+        case *action_step.ActionStepImpl:
+            s.PipelineStep = pipelineStep
+            // Additional setup for action service
             actionServiceName := pipelineStep.ActionConfig
-
             actionServiceInstance, ok := registry.GetActionService(actionServiceName)
             if !ok {
                 return fmt.Errorf("unknown Action service: %s", actionServiceName)
             }
-
-            actionStep.ActionServiceInstance = actionServiceInstance
-            step = actionStep
-
-		case "google_search":
-            step = &GoogleSearchStepImpl{PipelineStep: pipelineStep}
-		default:
-			return fmt.Errorf("unknown step type: %s", pipelineStep.Type)
-		}
+            s.ActionServiceInstance = actionServiceInstance
+        default:
+            // Attempt to set the PipelineStep field directly
+            if err := setPipelineStepField(step, pipelineStep); err != nil {
+                return fmt.Errorf("cannot set PipelineStep for step type %s: %v", pipelineStep.Type, err)
+            }
+        }
 
 		err = step.Execute(ctx, p.Context)
 		stepEndTime := time.Now().Unix()
@@ -94,6 +89,8 @@ func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.Plugin
 			stepResult["status"] = "failed"
 			stepResult["error_message"] = err.Error()
 			stepResult["data"] = fmt.Sprintf("Error: %v", err)
+			// Return the error to stop pipeline execution
+			return err
 		}
 
 		results[pipelineStep.UUID] = stepResult
@@ -147,5 +144,22 @@ func SendExecutionResults(pipelineID string, results map[string]interface{}, sta
         return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
     }
 
+    return nil
+}
+
+// Helper function to set the PipelineStep field via reflection
+func setPipelineStepField(step interface{}, pipelineStep pipeline_type.PipelineStep) error {
+    v := reflect.ValueOf(step)
+    if v.Kind() == reflect.Ptr {
+        v = v.Elem()
+    }
+    field := v.FieldByName("PipelineStep")
+    if !field.IsValid() {
+        return fmt.Errorf("field PipelineStep not found")
+    }
+    if !field.CanSet() {
+        return fmt.Errorf("field PipelineStep cannot be set")
+    }
+    field.Set(reflect.ValueOf(pipelineStep))
     return nil
 }
