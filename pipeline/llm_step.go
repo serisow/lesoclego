@@ -27,6 +27,8 @@ func (s *LLMStepImpl) Execute(ctx context.Context, pipelineContext *Context) err
         if value, ok := pipelineContext.GetStepOutput(requiredStep); ok {
             placeholder := fmt.Sprintf("{%s}", requiredStep)
             prompt = strings.Replace(prompt, placeholder, fmt.Sprintf("%v", value), -1)
+        } else {
+            return fmt.Errorf("required step output '%s' not found in context", requiredStep)
         }
     }
 	// Ensure LLMService is not nil

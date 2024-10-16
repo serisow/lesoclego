@@ -79,4 +79,8 @@ func registerStepTypes(registry *pipeline.PluginRegistry, logger *slog.Logger) {
 	registry.RegisterLLMService("openai_image", llm_service.NewOpenAIImageService(logger)) // use dall-e model for now
 	registry.RegisterLLMService("anthropic", llm_service.NewAnthropicService(logger))
 	registry.RegisterLLMService("gemini", llm_service.NewGeminiService(logger))
+
+	// Register Action services
+	registry.RegisterActionService("create_article_action", &pipeline.CreateArticleAction{})
+	registry.RegisterActionService("update_entity_action", &pipeline.UpdateEntityAction{})
 }

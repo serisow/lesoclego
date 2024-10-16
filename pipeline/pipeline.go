@@ -63,6 +63,8 @@ type GoogleSearchParams struct {
     SafeSearch   string `json:"safe_search"`
 }
 
+var sendExecutionResultsFunc = SendExecutionResults
+
 func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 	ctx := context.Background()
     if p.Context == nil {
@@ -97,7 +99,19 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 			step = llmStep
 
 		case "action_step":
-			step = &ActionStepImpl{PipelineStep: pipelineStep}
+            actionStep := &ActionStepImpl{PipelineStep: pipelineStep}
+
+            // Assume ActionConfig contains the action service name
+            actionServiceName := pipelineStep.ActionConfig
+
+            actionServiceInstance, ok := registry.GetActionService(actionServiceName)
+            if !ok {
+                return fmt.Errorf("unknown Action service: %s", actionServiceName)
+            }
+
+            actionStep.ActionServiceInstance = actionServiceInstance
+            step = actionStep
+			
 		case "google_search":
             step = &GoogleSearchStepImpl{PipelineStep: pipelineStep}
 		default:
@@ -133,7 +147,7 @@ func ExecutePipeline(p *Pipeline, registry *PluginRegistry) error {
 	pipelineEndTime := time.Now().Unix()
 
 	// Send execution results to Drupal
-	err := SendExecutionResults(p.ID, results, pipelineStartTime, pipelineEndTime)
+	err := sendExecutionResultsFunc(p.ID, results, pipelineStartTime, pipelineEndTime)
 	if err != nil {
 		return fmt.Errorf("error sending execution results: %w", err)
 	}

@@ -1,20 +1,22 @@
-// pipeline/plugin_registry.go
 package pipeline
 
 import (
-    "fmt"
-    "github.com/serisow/lesocle/pipeline/llm_service"
+	"fmt"
+
+	"github.com/serisow/lesocle/pipeline/llm_service"
 )
 
 type PluginRegistry struct {
     stepTypes   map[string]func() Step
     llmServices map[string]llm_service.LLMService
+    actionServices map[string]ActionService
 }
 
 func NewPluginRegistry() *PluginRegistry {
     return &PluginRegistry{
         stepTypes:   make(map[string]func() Step),
         llmServices: make(map[string]llm_service.LLMService),
+        actionServices: make(map[string]ActionService),
     }
 }
 
@@ -40,5 +42,16 @@ func (pr *PluginRegistry) RegisterLLMService(name string, service llm_service.LL
 // GetLLMService returns an LLM service by name
 func (pr *PluginRegistry) GetLLMService(name string) (llm_service.LLMService, bool) {
     service, ok := pr.llmServices[name]
+    return service, ok
+}
+
+// RegisterActionService registers a new Action service
+func (pr *PluginRegistry) RegisterActionService(name string, service ActionService) {
+    pr.actionServices[name] = service
+}
+
+// GetActionService returns an Action service by name
+func (pr *PluginRegistry) GetActionService(name string) (ActionService, bool) {
+    service, ok := pr.actionServices[name]
     return service, ok
 }

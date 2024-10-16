@@ -1,5 +1,3 @@
-// google_search_step.go
-
 package pipeline
 
 import (
