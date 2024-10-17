@@ -16,35 +16,60 @@ import (
 )
 
 type GoogleSearchStepImpl struct {
-    pipeline_type.PipelineStep
+    PipelineStep      pipeline_type.PipelineStep
+    HttpClient        *http.Client
+    GoogleAPIBaseURL  string
+    APIKey            string
+    SearchEngineID    string
 }
 
 func (s *GoogleSearchStepImpl) Execute(ctx context.Context, pipelineContext *pipeline_type.Context) error {
-    if s.GoogleSearchConfig == nil {
+    if s.PipelineStep.GoogleSearchConfig == nil {
         return fmt.Errorf("google search configuration is missing")
     }
 
-    cfg := config.Load()
-    apiKey := cfg.GoogleCustomSearchAPIKey
-    cx := cfg.GoogleCustomSearchEngineID
+    apiKey := s.APIKey
+    cx := s.SearchEngineID
+
+    // Fallback to config if values are empty
+    if apiKey == "" || cx == "" {
+        cfg := config.Load()
+        if apiKey == "" {
+            apiKey = cfg.GoogleCustomSearchAPIKey
+        }
+        if cx == "" {
+            cx = cfg.GoogleCustomSearchEngineID
+        }
+    }
 
     if apiKey == "" || cx == "" {
         return fmt.Errorf("google Custom Search API key or Search Engine ID is not configured")
     }
 
-    query := s.GoogleSearchConfig.Query
-    if s.GoogleSearchConfig.Category != "" {
-        query += " " + s.GoogleSearchConfig.Category
+    // Use injected base URL or default
+    baseURL := s.GoogleAPIBaseURL
+    if baseURL == "" {
+        baseURL = "https://www.googleapis.com/customsearch/v1"
     }
 
-    baseURL := "https://www.googleapis.com/customsearch/v1"
+    // Use injected HTTP client or default
+    client := s.HttpClient
+    if client == nil {
+        client = http.DefaultClient
+    }
+
+    query := s.PipelineStep.GoogleSearchConfig.Query
+    if s.PipelineStep.GoogleSearchConfig.Category != "" {
+        query += " " + s.PipelineStep.GoogleSearchConfig.Category
+    }
+
     params := url.Values{}
     params.Set("key", apiKey)
     params.Set("cx", cx)
     params.Set("q", query)
 
     // Add advanced parameters
-    advParams := s.GoogleSearchConfig.AdvancedParams
+    advParams := s.PipelineStep.GoogleSearchConfig.AdvancedParams
     if advParams.NumResults != "" {
         params.Set("num", advParams.NumResults)
     }
@@ -72,7 +97,7 @@ func (s *GoogleSearchStepImpl) Execute(ctx context.Context, pipelineContext *pip
 
     fullURL := baseURL + "?" + params.Encode()
 
-    resp, err := http.Get(fullURL)
+    resp, err := client.Get(fullURL)
     if err != nil {
         return fmt.Errorf("error making Google search request: %w", err)
     }
@@ -94,7 +119,7 @@ func (s *GoogleSearchStepImpl) Execute(ctx context.Context, pipelineContext *pip
     }
 
     // Store the formatted results in the pipeline context
-    pipelineContext.SetStepOutput(s.StepOutputKey, formattedResults)
+    pipelineContext.SetStepOutput(s.PipelineStep.StepOutputKey, formattedResults)
 
     return nil
 }
