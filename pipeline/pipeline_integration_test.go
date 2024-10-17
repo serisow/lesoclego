@@ -2,9 +2,15 @@ package pipeline_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/llm_step"
@@ -30,17 +36,7 @@ func (m *MockLLMService) CallLLM(ctx context.Context, config map[string]interfac
     return m.Response, nil
 }
 
-type MockActionService struct {
-    Response string
-    Error    error
-}
 
-func (m *MockActionService) Execute(ctx context.Context, actionConfig string, pipelineContext *pipeline_type.Context, step *pipeline_type.PipelineStep) (string, error) {
-    if m.Error != nil {
-        return "", m.Error
-    }
-    return m.Response, nil
-}
 
 type MockGoogleSearchStep struct {
 	PipelineStep pipeline_type.PipelineStep
@@ -82,7 +78,7 @@ func TestFullPipelineExecution(t *testing.T) {
     registry.RegisterLLMService("mock_llm_service", mockLLMService)
 
     // Register mock action service
-    mockActionService := &MockActionService{Response: "Action step output"}
+    mockActionService := &action_service.MockActionService{Response: "Action step output"}
     registry.RegisterActionService("mock_action_service", mockActionService)
 
     // Register mock Google search step
@@ -376,5 +372,354 @@ func TestPipelineComplexStepSequenceIntegration(t *testing.T) {
     finalArticle, exists := ctx.GetStepOutput("final_article")
     if !exists || finalArticle != "This is the refined article." {
         t.Errorf("Expected 'This is the refined article.', got '%v'", finalArticle)
+    }
+}
+
+
+func TestPipelineExecutionWithActionServiceError(t *testing.T) {
+    // Set GO_ENVIRONMENT to "test"
+    os.Setenv("GO_ENVIRONMENT", "test")
+
+    // Mock SendExecutionResults
+    originalSendExecutionResultsFunc := pipeline.SendExecutionResultsFunc
+    defer func() { pipeline.SendExecutionResultsFunc = originalSendExecutionResultsFunc }()
+    pipeline.SendExecutionResultsFunc = func(pipelineID string, results map[string]interface{}, startTime, endTime int64) error {
+        // Do nothing
+        return nil
+    }
+
+    // Initialize the plugin registry
+    registry := plugin_registry.NewPluginRegistry()
+
+    // Register mock action service that returns an error
+    mockActionService := &action_service.MockActionService{Error: errors.New("Mock Action Service error")}
+    registry.RegisterActionService("mock_action_service", mockActionService)
+
+    // Register action_step
+    registry.RegisterStepType("action_step", func() step.Step {
+        return &action_step.ActionStepImpl{}
+    })
+
+    // Define pipeline steps
+    steps := []pipeline_type.PipelineStep{
+        {
+            ID:            "action_step_1",
+            Type:          "action_step",
+            ActionConfig:  "mock_action_service",
+            StepOutputKey: "action_output",
+        },
+    }
+
+    // Initialize pipeline context
+    ctx := pipeline_type.NewContext()
+
+    // Create pipeline
+    p := &pipeline_type.Pipeline{
+        ID:      "test_pipeline_action_error",
+        Steps:   steps,
+        Context: ctx,
+    }
+
+    // Execute pipeline
+    err := pipeline.ExecutePipeline(p, registry)
+    if err == nil {
+        t.Fatal("Expected pipeline execution to fail, but it succeeded")
+    }
+
+    expectedErrorMsg := "error executing action service for step action_step_1: Mock Action Service error"
+    if err.Error() != expectedErrorMsg {
+        t.Errorf("Expected error '%s', got '%s'", expectedErrorMsg, err.Error())
+    }
+}
+
+
+func TestSendExecutionResults_Success(t *testing.T) {
+    // Set up a mock server
+    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Verify request method and headers
+        if r.Method != http.MethodPost {
+            t.Errorf("Expected method POST, got %s", r.Method)
+        }
+        if r.Header.Get("Content-Type") != "application/json" {
+            t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+        }
+
+        // Read and verify the request body
+        body, err := io.ReadAll(r.Body)
+        if err != nil {
+            t.Errorf("Error reading request body: %v", err)
+        }
+        defer r.Body.Close()
+
+        var data map[string]interface{}
+        err = json.Unmarshal(body, &data)
+        if err != nil {
+            t.Errorf("Error unmarshaling JSON: %v", err)
+        }
+
+        // Verify the pipeline ID and results in the request body
+        if data["pipeline_id"] != "test_pipeline" {
+            t.Errorf("Expected pipeline_id 'test_pipeline', got '%v'", data["pipeline_id"])
+        }
+
+        // Respond with 200 OK
+        w.WriteHeader(http.StatusOK)
+    }))
+    defer server.Close()
+
+    // Override the API endpoint in config
+    originalAPIEndpoint := os.Getenv("API_ENDPOINT")
+    defer os.Setenv("API_ENDPOINT", originalAPIEndpoint)
+    os.Setenv("API_ENDPOINT", server.URL)
+
+    // Prepare test data
+    pipelineID := "test_pipeline"
+    results := map[string]interface{}{
+        "step1": map[string]interface{}{
+            "status": "completed",
+            "data":   "test data",
+        },
+    }
+    startTime := time.Now().Unix()
+    endTime := startTime + 10
+
+    // Call the function
+    err := pipeline.SendExecutionResults(pipelineID, results, startTime, endTime)
+    if err != nil {
+        t.Errorf("Expected no error, got %v", err)
+    }
+}
+
+func TestSendExecutionResults_Non200Response(t *testing.T) {
+    // Set up a mock server that responds with 500 Internal Server Error
+    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusInternalServerError)
+    }))
+    defer server.Close()
+
+    // Override the API endpoint in config
+    originalAPIEndpoint := os.Getenv("API_ENDPOINT")
+    defer os.Setenv("API_ENDPOINT", originalAPIEndpoint)
+    os.Setenv("API_ENDPOINT", server.URL)
+
+    // Prepare test data
+    pipelineID := "test_pipeline"
+    results := map[string]interface{}{}
+    startTime := time.Now().Unix()
+    endTime := startTime + 10
+
+    // Call the function
+    err := pipeline.SendExecutionResults(pipelineID, results, startTime, endTime)
+    if err == nil {
+        t.Errorf("Expected error due to non-200 response, got nil")
+    } else {
+        expectedErrorMsg := "unexpected status code: 500"
+        if err.Error() != expectedErrorMsg {
+            t.Errorf("Expected error '%s', got '%s'", expectedErrorMsg, err.Error())
+        }
+    }
+}
+
+func TestSendExecutionResults_MarshalError(t *testing.T) {
+    // Prepare test data with unmarshalable data
+    pipelineID := "test_pipeline"
+    results := map[string]interface{}{
+        "invalid": make(chan int), // channels cannot be marshaled to JSON
+    }
+    startTime := time.Now().Unix()
+    endTime := startTime + 10
+
+    // Call the function
+    err := pipeline.SendExecutionResults(pipelineID, results, startTime, endTime)
+    if err == nil {
+        t.Errorf("Expected error due to JSON marshal error, got nil")
+    } else {
+        if !strings.Contains(err.Error(), "error marshaling results") {
+            t.Errorf("Expected marshal error, got '%s'", err.Error())
+        }
+    }
+}
+
+func TestSendExecutionResults_NetworkError(t *testing.T) {
+    // Close the server to simulate a network error
+    server := httptest.NewServer(nil)
+    server.Close()
+
+    // Override the API endpoint in config to point to the closed server
+    originalAPIEndpoint := os.Getenv("API_ENDPOINT")
+    defer os.Setenv("API_ENDPOINT", originalAPIEndpoint)
+    os.Setenv("API_ENDPOINT", server.URL)
+
+    // Prepare test data
+    pipelineID := "test_pipeline"
+    results := map[string]interface{}{}
+    startTime := time.Now().Unix()
+    endTime := startTime + 10
+
+    // Call the function
+    err := pipeline.SendExecutionResults(pipelineID, results, startTime, endTime)
+    if err == nil {
+        t.Errorf("Expected network error, got nil")
+    } else {
+        if !strings.Contains(err.Error(), "error sending results") {
+            t.Errorf("Expected network error, got '%s'", err.Error())
+        }
+    }
+}
+
+func TestPipelineExecutionWithUnknownStepType(t *testing.T) {
+    // Set GO_ENVIRONMENT to "test"
+    os.Setenv("GO_ENVIRONMENT", "test")
+
+    // Mock SendExecutionResults
+    originalSendExecutionResultsFunc := pipeline.SendExecutionResultsFunc
+    defer func() { pipeline.SendExecutionResultsFunc = originalSendExecutionResultsFunc }()
+    pipeline.SendExecutionResultsFunc = func(pipelineID string, results map[string]interface{}, startTime, endTime int64) error {
+        // Do nothing
+        return nil
+    }
+
+    // Initialize the plugin registry without registering any steps
+    registry := plugin_registry.NewPluginRegistry()
+
+    // Define pipeline steps with an unknown step type
+    steps := []pipeline_type.PipelineStep{
+        {
+            ID:   "unknown_step_1",
+            Type: "unknown_step",
+        },
+    }
+
+    // Initialize pipeline context
+    ctx := pipeline_type.NewContext()
+
+    // Create pipeline
+    p := &pipeline_type.Pipeline{
+        ID:      "test_pipeline_unknown_step",
+        Steps:   steps,
+        Context: ctx,
+    }
+
+    // Execute pipeline
+    err := pipeline.ExecutePipeline(p, registry)
+    if err == nil {
+        t.Fatal("Expected pipeline execution to fail due to unknown step type, but it succeeded")
+    }
+
+    expectedErrorMsg := "unknown step type: unknown_step"
+    if err.Error() != expectedErrorMsg {
+        t.Errorf("Expected error '%s', got '%s'", expectedErrorMsg, err.Error())
+    }
+}
+
+// StepWithoutPipelineStepField simulates a step that lacks the PipelineStep field
+type StepWithoutPipelineStepField struct{}
+
+func (s *StepWithoutPipelineStepField) Execute(ctx context.Context, pipelineContext *pipeline_type.Context) error {
+    return nil
+}
+
+func (s *StepWithoutPipelineStepField) GetType() string {
+    return "no_pipeline_step_field"
+}
+
+func TestPipelineExecutionWithReflectionFailure(t *testing.T) {
+    // Set GO_ENVIRONMENT to "test"
+    os.Setenv("GO_ENVIRONMENT", "test")
+
+    // Mock SendExecutionResults
+    originalSendExecutionResultsFunc := pipeline.SendExecutionResultsFunc
+    defer func() { pipeline.SendExecutionResultsFunc = originalSendExecutionResultsFunc }()
+    pipeline.SendExecutionResultsFunc = func(pipelineID string, results map[string]interface{}, startTime, endTime int64) error {
+        // Do nothing
+        return nil
+    }
+
+    // Initialize the plugin registry and register the faulty step
+    registry := plugin_registry.NewPluginRegistry()
+    registry.RegisterStepType("no_pipeline_step_field", func() step.Step {
+        return &StepWithoutPipelineStepField{}
+    })
+
+    // Define pipeline steps
+    steps := []pipeline_type.PipelineStep{
+        {
+            ID:   "step1",
+            Type: "no_pipeline_step_field",
+        },
+    }
+
+    // Initialize pipeline context
+    ctx := pipeline_type.NewContext()
+
+    // Create pipeline
+    p := &pipeline_type.Pipeline{
+        ID:      "test_pipeline_reflection_failure",
+        Steps:   steps,
+        Context: ctx,
+    }
+
+    // Execute pipeline
+    err := pipeline.ExecutePipeline(p, registry)
+    if err == nil {
+        t.Fatal("Expected pipeline execution to fail due to reflection error, but it succeeded")
+    }
+
+    expectedErrorMsg := "cannot set PipelineStep for step type no_pipeline_step_field: field PipelineStep not found"
+    if err.Error() != expectedErrorMsg {
+        t.Errorf("Expected error '%s', got '%s'", expectedErrorMsg, err.Error())
+    }
+}
+
+func TestPipelineExecutionWithStepInitializationError(t *testing.T) {
+    // Set GO_ENVIRONMENT to "test"
+    os.Setenv("GO_ENVIRONMENT", "test")
+
+    // Mock SendExecutionResults
+    originalSendExecutionResultsFunc := pipeline.SendExecutionResultsFunc
+    defer func() { pipeline.SendExecutionResultsFunc = originalSendExecutionResultsFunc }()
+    pipeline.SendExecutionResultsFunc = func(pipelineID string, results map[string]interface{}, startTime, endTime int64) error {
+        // Do nothing
+        return nil
+    }
+
+    // Initialize the plugin registry and register a step that requires configuration
+    registry := plugin_registry.NewPluginRegistry()
+
+    // Register llm_step
+    registry.RegisterStepType("llm_step", func() step.Step {
+        return &llm_step.LLMStepImpl{}
+    })
+
+    // Define pipeline steps with missing LLMServiceConfig
+    steps := []pipeline_type.PipelineStep{
+        {
+            ID:            "llm_step_1",
+            Type:          "llm_step",
+            Prompt:        "Test prompt",
+            StepOutputKey: "output",
+            // LLMServiceConfig is intentionally missing
+        },
+    }
+
+    // Initialize pipeline context
+    ctx := pipeline_type.NewContext()
+
+    // Create pipeline
+    p := &pipeline_type.Pipeline{
+        ID:      "test_pipeline_step_init_error",
+        Steps:   steps,
+        Context: ctx,
+    }
+
+    // Execute pipeline
+    err := pipeline.ExecutePipeline(p, registry)
+    if err == nil {
+        t.Fatal("Expected pipeline execution to fail due to missing configuration, but it succeeded")
+    }
+
+    expectedErrorMsg := "service_name not found in llm_service configuration for step llm_step_1"
+    if err.Error() != expectedErrorMsg {
+        t.Errorf("Expected error '%s', got '%s'", expectedErrorMsg, err.Error())
     }
 }
