@@ -35,7 +35,7 @@ func main() {
 	go s.Start()
 
 	// Initialize server
-	r := server.SetupRoutes()
+	r := server.SetupRoutes(cfg.APIEndpoint, registry)
 	n := setupNegroni(r)
 
 	if cfg.Environment == "production" {

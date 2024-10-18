@@ -183,3 +183,8 @@ func (sp *ScheduledPipeline) ShouldRun(now time.Time) bool {
 	}
 	return false
 }
+
+// FetchFullPipeline fetches a full pipeline by ID
+func FetchFullPipeline(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
+	return fetchFullPipeline(id, apiEndpoint)
+}

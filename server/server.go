@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/serisow/lesocle/handlers"
+	"github.com/serisow/lesocle/plugin_registry"
 	"github.com/urfave/negroni"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -21,9 +23,12 @@ type Config struct {
 	WriteTimeout time.Duration
 }
 
-func SetupRoutes() *mux.Router {
+func SetupRoutes(apiEndpoint string, registry *plugin_registry.PluginRegistry) *mux.Router {
 	r := mux.NewRouter()
-	// Add your routes here
+
+	// New route for on-demand pipeline execution
+	pipelineHandler := handlers.NewPipelineHandler(apiEndpoint, registry)
+	r.HandleFunc("/pipeline/{id}/execute", pipelineHandler.ExecutePipeline).Methods("POST")
 	return r
 }
 
