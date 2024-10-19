@@ -10,6 +10,7 @@ import (
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
 	"github.com/serisow/lesocle/llm_step"
+	"github.com/serisow/lesocle/pipeline"
 	"github.com/serisow/lesocle/pipeline/step"
 	"github.com/serisow/lesocle/plugin_registry"
 	"github.com/serisow/lesocle/scheduler"
@@ -33,6 +34,11 @@ func main() {
 	// Initialize scheduler with PluginRegistry
 	s := scheduler.New(cfg.APIEndpoint, cfg.CheckInterval, registry)
 	go s.Start()
+
+    // Start the execution store cleanup
+    executionResultRetention := 24 * time.Hour // Retain results for 24 hours
+    cleanupInterval := 1 * time.Hour           // Run cleanup every hour
+    pipeline.StartExecutionStoreCleanup(executionResultRetention, cleanupInterval)
 
 	// Initialize server
 	r := server.SetupRoutes(cfg.APIEndpoint, registry)

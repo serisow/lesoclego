@@ -20,11 +20,23 @@ import (
 
 var SendExecutionResultsFunc = SendExecutionResults
 
-func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
+func ExecutePipeline(executionID string, p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error {
     ctx := context.Background()
     if p.Context == nil {
         p.Context = pipeline_type.NewContext()
     }
+
+    ExecutionStore.Lock()
+    execResult := &ExecutionResult{
+        PipelineID:  p.ID,
+        ExecutionID: executionID,
+        Status:      StatusStarted,
+        StartTime:   time.Now().Unix(),
+        SubmittedAt: time.Now().UTC().Format(time.RFC3339),
+        UserInput:   p.Context.GetUserInput(),
+    }
+    ExecutionStore.Executions[executionID] = execResult
+    ExecutionStore.Unlock()
 
     results := make(map[string]interface{})
     pipelineStartTime := time.Now().Unix()
@@ -89,7 +101,15 @@ func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.Plugin
 			stepResult["status"] = "failed"
 			stepResult["error_message"] = err.Error()
 			stepResult["data"] = fmt.Sprintf("Error: %v", err)
-			// Return the error to stop pipeline execution
+
+            // ADDED WHEN DOING ON-DEMAND EXECUTION: @TODO REMOVE THE 3 LINES ABOVE?
+            ExecutionStore.Lock()
+            execResult.Status = StatusFailed
+            execResult.EndTime = time.Now().Unix()
+            execResult.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+            execResult.ErrorMessage = err.Error()
+            ExecutionStore.Unlock()
+
 			return err
 		}
 
@@ -97,6 +117,16 @@ func ExecutePipeline(p *pipeline_type.Pipeline, registry *plugin_registry.Plugin
 	}
 
 	pipelineEndTime := time.Now().Unix()
+
+    // ADDED WHEN DOING ON-DEMAND EXECUTION
+
+    // Update execution status to completed
+    ExecutionStore.Lock()
+    execResult.Status = StatusCompleted
+    execResult.EndTime = pipelineEndTime
+    execResult.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+    execResult.Results = results
+    ExecutionStore.Unlock()
 
 	// Send execution results to Drupal
 	err := SendExecutionResultsFunc(p.ID, results, pipelineStartTime, pipelineEndTime)

@@ -29,6 +29,8 @@ func SetupRoutes(apiEndpoint string, registry *plugin_registry.PluginRegistry) *
 	// New route for on-demand pipeline execution
 	pipelineHandler := handlers.NewPipelineHandler(apiEndpoint, registry)
 	r.HandleFunc("/pipeline/{id}/execute", pipelineHandler.ExecutePipeline).Methods("POST")
+	r.HandleFunc("/pipeline/{id}/execution/{execution_id}/status", pipelineHandler.GetExecutionStatus).Methods("GET")
+    r.HandleFunc("/pipeline/{id}/execution/{execution_id}/results", pipelineHandler.GetExecutionResults).Methods("GET")
 	return r
 }
 

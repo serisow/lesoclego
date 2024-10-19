@@ -3,6 +3,7 @@ package pipeline_type
 type Context struct {
     Data map[string]interface{}
     StepOutputs map[string]interface{}
+    UserInput   string
 }
 
 func NewContext() *Context {
@@ -28,4 +29,12 @@ func (c *Context) SetStepOutput(key string, value interface{}) {
 func (c *Context) GetStepOutput(key string) (interface{}, bool) {
     val, ok := c.StepOutputs[key]
     return val, ok
+}
+
+func (c *Context) SetUserInput(input string) {
+    c.UserInput = input
+}
+
+func (c *Context) GetUserInput() string {
+    return c.UserInput
 }

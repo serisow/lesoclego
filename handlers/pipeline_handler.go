@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/serisow/lesocle/pipeline"
 	"github.com/serisow/lesocle/pipeline_type"
@@ -29,8 +31,10 @@ func (h *PipelineHandler) ExecutePipeline(w http.ResponseWriter, r *http.Request
     pipelineID := vars["id"]
 
     // Parse user input from request body
+    // Parse user input from request body
     var requestBody struct {
-        UserInput string `json:"user_input"`
+        UserInput   string `json:"user_input"`
+        CallbackURL string `json:"callback_url,omitempty"` // Optional
     }
     if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
         http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -50,25 +54,98 @@ func (h *PipelineHandler) ExecutePipeline(w http.ResponseWriter, r *http.Request
         return
     }
 
+    // Generate a unique execution ID
+    executionID := uuid.New().String()
+
+    // Set the user input in the pipeline's context
+    if fullPipeline.Context == nil {
+        fullPipeline.Context = pipeline_type.NewContext()
+    }
+    fullPipeline.Context.SetStepOutput("user_input", requestBody.UserInput)
+    fullPipeline.Context.SetUserInput(requestBody.UserInput)
+
     // Execute the pipeline with user input
     go func() {
-        // Set the user input in the pipeline's context
-        if fullPipeline.Context == nil {
-            fullPipeline.Context = pipeline_type.NewContext()
-        }
-        fullPipeline.Context.SetStepOutput("user_input", requestBody.UserInput)
-
-        err := pipeline.ExecutePipeline(&fullPipeline, h.Registry)
+        err := pipeline.ExecutePipeline(executionID, &fullPipeline, h.Registry)
         if err != nil {
             fmt.Printf("Error executing pipeline %s: %v\n", pipelineID, err)
         }
     }()
 
+    // Build response with execution details
+    response := map[string]interface{}{
+        "execution_id": executionID,
+        "pipeline_id":  pipelineID,
+        "status":       "started",
+        "submitted_at": time.Now().UTC().Format(time.RFC3339),
+        "user_input":   requestBody.UserInput,
+        "links": map[string]string{
+            "self":    fmt.Sprintf("/pipeline/%s/execution/%s", pipelineID, executionID),
+            "status":  fmt.Sprintf("/pipeline/%s/execution/%s/status", pipelineID, executionID),
+            "results": fmt.Sprintf("/pipeline/%s/execution/%s/results", pipelineID, executionID),
+        },
+    }
+
     // Respond to the client
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusAccepted)
-    json.NewEncoder(w).Encode(map[string]string{"message": "Pipeline execution started"})
+    json.NewEncoder(w).Encode(response)
 }
+
+func (h *PipelineHandler) GetExecutionStatus(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    executionID := vars["execution_id"]
+
+    pipeline.ExecutionStore.RLock()
+    execResult, exists := pipeline.ExecutionStore.Executions[executionID]
+    pipeline.ExecutionStore.RUnlock()
+
+    if !exists {
+        http.Error(w, "Execution ID not found", http.StatusNotFound)
+        return
+    }
+
+    response := map[string]interface{}{
+        "execution_id": execResult.ExecutionID,
+        "status":       execResult.Status,
+        "submitted_at": execResult.SubmittedAt,
+        "completed_at": execResult.CompletedAt,
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(response)
+}
+
+
+func (h *PipelineHandler) GetExecutionResults(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    executionID := vars["execution_id"]
+
+    pipeline.ExecutionStore.RLock()
+    execResult, exists := pipeline.ExecutionStore.Executions[executionID]
+    pipeline.ExecutionStore.RUnlock()
+
+    if !exists {
+        http.Error(w, "Execution ID not found", http.StatusNotFound)
+        return
+    }
+
+    if execResult.Status != pipeline.StatusCompleted {
+        http.Error(w, "Execution not completed yet", http.StatusAccepted)
+        return
+    }
+
+    response := map[string]interface{}{
+        "execution_id": execResult.ExecutionID,
+        "status":       execResult.Status,
+        "results":      execResult.Results,
+        "completed_at": execResult.CompletedAt,
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(response)
+}
+
 
 // isPipelineExecutableOnDemand is a placeholder function
 // In the future, this will check if the pipeline is flagged for on-demand execution

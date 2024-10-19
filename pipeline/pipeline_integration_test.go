@@ -134,7 +134,7 @@ func TestFullPipelineExecution(t *testing.T) {
     }
 
     // Execute pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err != nil {
         t.Fatalf("Pipeline execution failed: %v", err)
     }
@@ -210,7 +210,7 @@ func TestPipelineExecutionWithErrorHandling(t *testing.T) {
     }
 
     // Execute pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err == nil {
         t.Fatal("Expected pipeline execution to fail, but it succeeded")
     }
@@ -275,7 +275,7 @@ func TestPipelineLLMToActionIntegration(t *testing.T) {
     p := &pipeline_type.Pipeline{ID: "test_integration_pipeline", Steps: steps, Context: ctx}
 
     // Execute the Pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err != nil {
         t.Fatalf("Pipeline execution failed: %v", err)
     }
@@ -363,7 +363,7 @@ func TestPipelineComplexStepSequenceIntegration(t *testing.T) {
     p := &pipeline_type.Pipeline{ID: "test_complex_pipeline", Steps: steps, Context: ctx}
 
     // Execute the Pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err != nil {
         t.Fatalf("Pipeline execution failed: %v", err)
     }
@@ -421,7 +421,7 @@ func TestPipelineExecutionWithActionServiceError(t *testing.T) {
     }
 
     // Execute pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err == nil {
         t.Fatal("Expected pipeline execution to fail, but it succeeded")
     }
@@ -601,7 +601,7 @@ func TestPipelineExecutionWithUnknownStepType(t *testing.T) {
     }
 
     // Execute pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err == nil {
         t.Fatal("Expected pipeline execution to fail due to unknown step type, but it succeeded")
     }
@@ -660,7 +660,7 @@ func TestPipelineExecutionWithReflectionFailure(t *testing.T) {
     }
 
     // Execute pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err == nil {
         t.Fatal("Expected pipeline execution to fail due to reflection error, but it succeeded")
     }
@@ -713,7 +713,7 @@ func TestPipelineExecutionWithStepInitializationError(t *testing.T) {
     }
 
     // Execute pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err == nil {
         t.Fatal("Expected pipeline execution to fail due to missing configuration, but it succeeded")
     }

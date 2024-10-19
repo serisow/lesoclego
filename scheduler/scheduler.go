@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/serisow/lesocle/pipeline"
 	"github.com/serisow/lesocle/pipeline_type"
 	"github.com/serisow/lesocle/plugin_registry"
@@ -19,7 +20,12 @@ type Scheduler struct {
 	checkInterval time.Duration
 	registry      *plugin_registry.PluginRegistry
 	fetchPipelineFunc  func(id, apiEndpoint string) (pipeline_type.Pipeline, error)
-    executePipelineFunc func(p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error
+    executePipelineFunc func(executionID string, p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error
+	onPipelineComplete func(pipelineID string)
+
+	runningPipelinesMutex sync.Mutex
+    runningPipelines      map[string]struct{}
+
 }
 
 type ScheduledPipeline struct {
@@ -33,9 +39,6 @@ type ScheduledPipeline struct {
 
 }
 
-// Prevent multiple instance of the same pipeline running at the same time.
-// Solve potential data race.
-var runningPipelines sync.Map
 
 func New(apiEndpoint string, checkInterval time.Duration, registry *plugin_registry.PluginRegistry) *Scheduler {
 	return &Scheduler{
@@ -44,6 +47,7 @@ func New(apiEndpoint string, checkInterval time.Duration, registry *plugin_regis
 		registry:      registry,
 		fetchPipelineFunc:  fetchFullPipeline,
         executePipelineFunc: pipeline.ExecutePipeline,
+		runningPipelines:     make(map[string]struct{}),
 	}
 }
 
@@ -91,25 +95,46 @@ func (s *Scheduler) fetchScheduledPipelines() ([]*ScheduledPipeline, error) {
 }
 
 func (s *Scheduler) executePipeline(pipelineID string) {
-    if _, loaded := runningPipelines.LoadOrStore(pipelineID, struct{}{}); loaded {
-        // Pipeline is already running
+    s.runningPipelinesMutex.Lock()
+    if _, exists := s.runningPipelines[pipelineID]; exists {
+        s.runningPipelinesMutex.Unlock()
         return
     }
-    defer runningPipelines.Delete(pipelineID)
+    s.runningPipelines[pipelineID] = struct{}{}
+    s.runningPipelinesMutex.Unlock()
 
     fullPipeline, err := s.fetchPipelineFunc(pipelineID, s.apiEndpoint)
     if err != nil {
         log.Printf("Error fetching full pipeline %s: %v", pipelineID, err)
+        // Remove from runningPipelines since execution won't proceed
+        s.runningPipelinesMutex.Lock()
+        delete(s.runningPipelines, pipelineID)
+        s.runningPipelinesMutex.Unlock()
         return
     }
 
-    // Use injected execute function
-    err = s.executePipelineFunc(&fullPipeline, s.registry)
-	if err != nil {
-        log.Printf("Error executing pipeline %s: %v", pipelineID, err)
-    } else {
-        log.Printf("Successfully executed pipeline %s", pipelineID)
-    }
+    executionID := uuid.New().String()
+
+
+
+    go func() {
+        defer func() {
+            s.runningPipelinesMutex.Lock()
+            delete(s.runningPipelines, pipelineID)
+            s.runningPipelinesMutex.Unlock()
+			// Call the completion callback if it's set
+			if s.onPipelineComplete != nil {
+				s.onPipelineComplete(pipelineID)
+			}
+        }()
+
+        err = s.executePipelineFunc(executionID, &fullPipeline, s.registry)
+        if err != nil {
+            log.Printf("Error executing pipeline %s: %v", pipelineID, err)
+        } else {
+            log.Printf("Successfully executed pipeline %s", pipelineID)
+        }
+    }()
 }
 
 func fetchFullPipeline(id, apiEndpoint string) (pipeline_type.Pipeline, error) {

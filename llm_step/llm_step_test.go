@@ -182,7 +182,7 @@ func TestPipelineWithLLMStep(t *testing.T) {
     }
 
     // Execute pipeline
-    err := pipeline.ExecutePipeline(p, registry)
+    err := pipeline.ExecutePipeline("test-execution-id", p, registry)
     if err != nil {
         t.Fatalf("Pipeline execution failed: %v", err)
     }
