@@ -1,15 +1,17 @@
 package main
 
 import (
+	"log"
 	"log/slog"
 	"net/http"
-	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
 	"github.com/serisow/lesocle/llm_step"
+	"github.com/serisow/lesocle/logging"
 	"github.com/serisow/lesocle/pipeline"
 	"github.com/serisow/lesocle/pipeline/step"
 	"github.com/serisow/lesocle/plugin_registry"
@@ -24,8 +26,12 @@ import (
 
 func main() {
 	cfg := config.Load()
+
 	// Initialize the logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger, err := initLogger()
+    if err != nil {
+        log.Fatalf("Failed to initialize logger: %v", err)
+    }
 
 	// Initialize PluginRegistry
 	registry := plugin_registry.NewPluginRegistry()
@@ -96,4 +102,26 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("update_entity_action", &action_service.UpdateEntityAction{})
 	registry.RegisterActionService("fetch_taxonomy", &action_service.FetchTaxonomyAction{})
 
+}
+
+func initLogger() (*slog.Logger, error) {
+    // Configure log directory - you might want to make this configurable
+    logDir := filepath.Join("logs", "pipeline")
+
+    // Create daily file handler
+    fileHandler, err := logging.NewDailyFileHandler(logDir, &slog.HandlerOptions{
+        Level: slog.LevelDebug,
+        ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+            // You can customize attribute handling here if needed
+            return a
+        },
+    })
+    if err != nil {
+        return nil, err
+    }
+
+    // Create logger with the custom handler
+    logger := slog.New(fileHandler)
+
+    return logger, nil
 }
