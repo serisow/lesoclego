@@ -94,4 +94,6 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	// Register Action services
 	registry.RegisterActionService("create_article_action", &action_service.CreateArticleAction{})
 	registry.RegisterActionService("update_entity_action", &action_service.UpdateEntityAction{})
+	registry.RegisterActionService("fetch_taxonomy", &action_service.FetchTaxonomyAction{})
+
 }

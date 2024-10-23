@@ -33,17 +33,39 @@ func (s *OpenAIImageService) CallLLM(ctx context.Context, config map[string]inte
             return response, nil
         }
 
+        // Check if error contains OpenAI error details
+        if httpErr, ok := err.(*OpenAIHttpError); ok {
+            if httpErr.StatusCode == 429 {
+                s.logger.Error("OpenAI Image API quota exceeded",
+                    slog.String("error_type", httpErr.ErrorType),
+                    slog.String("error_message", httpErr.Message),
+                    slog.String("model", config["model_name"].(string)),
+                    slog.String("image_size", config["image_size"].(string)),
+                    slog.Int("status_code", httpErr.StatusCode))
+                return "", fmt.Errorf("OpenAI Image quota exceeded: %s (Type: %s)", httpErr.Message, httpErr.ErrorType)
+            }
+
+            s.logger.Error("OpenAI Image API error",
+                slog.Int("attempt", attempt),
+                slog.Int("status_code", httpErr.StatusCode),
+                slog.String("error_type", httpErr.ErrorType),
+                slog.String("error_message", httpErr.Message),
+                slog.String("raw_body", httpErr.RawBody))
+        }
+
         if attempt == maxRetries {
             s.logger.Error("Error calling OpenAI Image API after multiple attempts",
                 slog.Int("attempts", maxRetries),
-                slog.String("error", err.Error()))
+                slog.String("error", err.Error()),
+                slog.String("model", config["model_name"].(string)))
             return "", fmt.Errorf("failed to call OpenAI Image API after %d attempts: %w", maxRetries, err)
         }
 
         s.logger.Warn("Attempt failed, retrying",
             slog.Int("attempt", attempt),
-            slog.Duration("retryDelay", retryDelay),
+            slog.Duration("retry_delay", retryDelay),
             slog.String("error", err.Error()))
+
         time.Sleep(retryDelay)
     }
 
@@ -94,7 +116,30 @@ func (s *OpenAIImageService) callOpenAIImage(ctx context.Context, config map[str
     if err != nil {
         return "", fmt.Errorf("error making request: %w", err)
     }
+
     defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        rawBody, openAIErr := extractOpenAIErrorDetails(resp)
+        httpErr := &OpenAIHttpError{
+            StatusCode: resp.StatusCode,
+            RawBody:    rawBody,
+        }
+
+        if openAIErr != nil {
+            httpErr.Message = openAIErr.Error.Message
+            httpErr.ErrorType = openAIErr.Error.Type
+        } else {
+            httpErr.Message = "Unknown error"
+            httpErr.ErrorType = "unknown"
+        }
+
+        return "", httpErr
+    }
+
+
+
+
 
     body, err := io.ReadAll(resp.Body)
     if err != nil {

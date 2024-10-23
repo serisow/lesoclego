@@ -17,6 +17,7 @@ type OpenAIService struct {
     logger     *slog.Logger
 }
 
+
 func NewOpenAIService(logger *slog.Logger) *OpenAIService {
     return &OpenAIService{
         httpClient: &http.Client{Timeout: 120 * time.Second},
@@ -29,22 +30,44 @@ func (s *OpenAIService) CallLLM(ctx context.Context, config map[string]interface
     retryDelay := 5 * time.Second
 
     for attempt := 1; attempt <= maxRetries; attempt++ {
+
         response, err := s.callOpenAI(ctx, config, prompt)
         if err == nil {
             return response, nil
         }
 
+        // Check if error contains OpenAI error details
+        if httpErr, ok := err.(*OpenAIHttpError); ok {
+            if httpErr.StatusCode == 429 {
+                s.logger.Error("OpenAI API quota exceeded",
+                    slog.String("error_type", httpErr.ErrorType),
+                    slog.String("error_message", httpErr.Message),
+                    slog.String("model", config["model_name"].(string)),
+                    slog.Int("status_code", httpErr.StatusCode))
+                return "", fmt.Errorf("OpenAI quota exceeded: %s (Type: %s)", httpErr.Message, httpErr.ErrorType)
+            }
+
+            s.logger.Error("OpenAI API error",
+                slog.Int("attempt", attempt),
+                slog.Int("status_code", httpErr.StatusCode),
+                slog.String("error_type", httpErr.ErrorType),
+                slog.String("error_message", httpErr.Message),
+                slog.String("raw_body", httpErr.RawBody))
+        }
+
         if attempt == maxRetries {
             s.logger.Error("Error calling OpenAI API after multiple attempts",
                 slog.Int("attempts", maxRetries),
-                slog.String("error",err.Error()))
+                slog.String("error", err.Error()),
+                slog.String("model", config["model_name"].(string)))
             return "", fmt.Errorf("failed to call OpenAI API after %d attempts: %w", maxRetries, err)
         }
 
         s.logger.Warn("Attempt failed, retrying",
             slog.Int("attempt", attempt),
-            slog.Duration("retryDelay", retryDelay),
+            slog.Duration("retry_delay", retryDelay),
             slog.String("error", err.Error()))
+
         time.Sleep(retryDelay)
     }
 
@@ -89,10 +112,31 @@ func (s *OpenAIService) callOpenAI(ctx context.Context, config map[string]interf
     req.Header.Set("Content-Type", "application/json")
 
     resp, err := s.httpClient.Do(req)
+
     if err != nil {
         return "", fmt.Errorf("error making request: %w", err)
     }
+
     defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        rawBody, openAIErr := extractOpenAIErrorDetails(resp)
+        httpErr := &OpenAIHttpError{
+            StatusCode: resp.StatusCode,
+            RawBody:    rawBody,
+        }
+
+        if openAIErr != nil {
+            httpErr.Message = openAIErr.Error.Message
+            httpErr.ErrorType = openAIErr.Error.Type
+        } else {
+            httpErr.Message = "Unknown error"
+            httpErr.ErrorType = "unknown"
+        }
+
+        return "", httpErr
+    }
+
 
     body, err := io.ReadAll(resp.Body)
     if err != nil {
@@ -126,3 +170,6 @@ func (s *OpenAIService) callOpenAI(ctx context.Context, config map[string]interf
 
     return content, nil
 }
+
+
+
