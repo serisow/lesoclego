@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"reflect"
 	"time"
@@ -37,6 +38,9 @@ func ExecutePipeline(executionID string, p *pipeline_type.Pipeline, registry *pl
     }
     ExecutionStore.Executions[executionID] = execResult
     ExecutionStore.Unlock()
+    var executionError error  // Add this line to track errors
+
+
 
     results := make(map[string]interface{})
     pipelineStartTime := time.Now().Unix()
@@ -46,8 +50,21 @@ func ExecutePipeline(executionID string, p *pipeline_type.Pipeline, registry *pl
 
         // Get the step instance from the registry
         step, err := registry.GetStepInstance(pipelineStep.Type)
+
         if err != nil {
-            return fmt.Errorf("unknown step type: %s", pipelineStep.Type)
+            executionError = fmt.Errorf("unknown step type: %s", pipelineStep.Type)
+            stepResult := map[string]interface{}{
+                "step_uuid":        pipelineStep.UUID,
+                "step_description": pipelineStep.StepDescription,
+                "status":          "failed",
+                "start_time":      stepStartTime,
+                "end_time":        time.Now().Unix(),
+                "step_type":       pipelineStep.Type,
+                "sequence":        pipelineStep.Weight,
+                "error_message":   executionError.Error(),
+            }
+            results[pipelineStep.UUID] = stepResult
+            break
         }
 
         // Set the PipelineStep field directly
@@ -97,44 +114,49 @@ func ExecutePipeline(executionID string, p *pipeline_type.Pipeline, registry *pl
 			"error_message":    "",
 		}
 
-		if err != nil {
-			stepResult["status"] = "failed"
-			stepResult["error_message"] = err.Error()
-			stepResult["data"] = fmt.Sprintf("Error: %v", err)
-
-            // ADDED WHEN DOING ON-DEMAND EXECUTION: @TODO REMOVE THE 3 LINES ABOVE?
+        if err != nil {
+            stepResult["status"] = "failed"
+            stepResult["error_message"] = err.Error()
+            stepResult["data"] = fmt.Sprintf("Error: %v", err)
+            executionError = err  // Store the error but don't return yet
+        
             ExecutionStore.Lock()
             execResult.Status = StatusFailed
             execResult.EndTime = time.Now().Unix()
             execResult.CompletedAt = time.Now().UTC().Format(time.RFC3339)
             execResult.ErrorMessage = err.Error()
             ExecutionStore.Unlock()
-
-			return err
-		}
+        
+            results[pipelineStep.UUID] = stepResult
+            break  // Break the loop after storing the failed step result
+        }
 
 		results[pipelineStep.UUID] = stepResult
 	}
 
-	pipelineEndTime := time.Now().Unix()
+    pipelineEndTime := time.Now().Unix()
 
-    // ADDED WHEN DOING ON-DEMAND EXECUTION
-
-    // Update execution status to completed
+    // Update execution status based on whether we encountered an error
     ExecutionStore.Lock()
-    execResult.Status = StatusCompleted
+    if executionError == nil {
+        execResult.Status = StatusCompleted
+    } else {
+        execResult.Status = StatusFailed
+    }
     execResult.EndTime = pipelineEndTime
     execResult.CompletedAt = time.Now().UTC().Format(time.RFC3339)
     execResult.Results = results
     ExecutionStore.Unlock()
 
-	// Send execution results to Drupal
-	err := SendExecutionResultsFunc(p.ID, results, pipelineStartTime, pipelineEndTime)
-	if err != nil {
-		return fmt.Errorf("error sending execution results: %w", err)
-	}
-	
-	return nil
+    // Always send execution results to Drupal, regardless of error
+    err := SendExecutionResultsFunc(p.ID, results, pipelineStartTime, pipelineEndTime)
+    if err != nil {
+        // Log the error but don't override the original execution error
+        log.Printf("Error sending execution results: %v", err)
+    }
+
+    // Return the original execution error if any
+    return executionError
 }
 
 func SendExecutionResults(pipelineID string, results map[string]interface{}, startTime, endTime int64) error {
@@ -147,6 +169,7 @@ func SendExecutionResults(pipelineID string, results map[string]interface{}, sta
         "start_time": startTime,
         "end_time": endTime,
         "step_results": results,
+        "success": !hasFailedSteps(results),
     }
 
     jsonData, err := json.Marshal(executionData)
@@ -192,4 +215,15 @@ func setPipelineStepField(step interface{}, pipelineStep pipeline_type.PipelineS
     }
     field.Set(reflect.ValueOf(pipelineStep))
     return nil
+}
+
+func hasFailedSteps(results map[string]interface{}) bool {
+    for _, result := range results {
+        if stepResult, ok := result.(map[string]interface{}); ok {
+            if status, ok := stepResult["status"].(string); ok && status == "failed" {
+                return true
+            }
+        }
+    }
+    return false
 }

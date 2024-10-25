@@ -15,6 +15,7 @@ type Pipeline struct {
 	Label         string         `json:"label"`
 	Steps         []PipelineStep `json:"steps"`
 	ScheduledTime int64          `json:"scheduled_time"`
+	ExecutionFailures int           `json:"execution_failures"`
 	LLMServices   map[string]llm_service.LLMService
 	Context       *Context
 }

@@ -15,6 +15,11 @@ import (
 	"github.com/serisow/lesocle/plugin_registry"
 )
 
+const (
+    MaxExecutionFailures = 3
+)
+
+
 type Scheduler struct {
 	apiEndpoint   string
 	checkInterval time.Duration
@@ -112,6 +117,16 @@ func (s *Scheduler) executePipeline(pipelineID string) {
         s.runningPipelinesMutex.Unlock()
         return
     }
+
+	// Check failure count before executing
+	if fullPipeline.ExecutionFailures >= MaxExecutionFailures {
+		log.Printf("Pipeline %s has failed %d times consecutively. Skipping execution.", 
+			pipelineID, fullPipeline.ExecutionFailures)
+		s.runningPipelinesMutex.Lock()
+		delete(s.runningPipelines, pipelineID)
+		s.runningPipelinesMutex.Unlock()
+		return
+	}
 
     executionID := uuid.New().String()
 
