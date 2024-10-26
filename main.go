@@ -18,6 +18,8 @@ import (
 	"github.com/serisow/lesocle/scheduler"
 	"github.com/serisow/lesocle/search_step"
 	"github.com/serisow/lesocle/server"
+
+	//"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/llm_service"
 
@@ -98,9 +100,11 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterLLMService("gemini", llm_service.NewGeminiService(logger))
 
 	// Register Action services
-	registry.RegisterActionService("create_article_action", &action_service.CreateArticleAction{})
-	registry.RegisterActionService("update_entity_action", &action_service.UpdateEntityAction{})
-	registry.RegisterActionService("fetch_taxonomy", &action_service.FetchTaxonomyAction{})
+	registry.RegisterActionService("process_data_action", &action_service.ProcessDataActionService{})
+
+	//registry.RegisterActionService("create_article_action", &action_service.CreateArticleAction{})
+	//registry.RegisterActionService("update_entity_action", &action_service.UpdateEntityAction{})
+	//registry.RegisterActionService("fetch_taxonomy", &action_service.FetchTaxonomyAction{})
 
 }
 

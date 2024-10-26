@@ -86,11 +86,13 @@ func TestRegisterAndGetActionService(t *testing.T) {
     registry := plugin_registry.NewPluginRegistry()
 
     // Register a mock action service
-    mockActionService := &action_service.MockActionService{}
-    registry.RegisterActionService("mock_action_service", mockActionService)
+    mockActionService := &action_service.MockActionService{
+        ServiceName: "process_data_action",
+    }
+    registry.RegisterActionService("process_data_action", mockActionService)
 
     // Retrieve the action service
-    service, ok := registry.GetActionService("mock_action_service")
+    service, ok := registry.GetActionService("process_data_action")
     if !ok {
         t.Fatal("Expected to retrieve registered action service, got false")
     }

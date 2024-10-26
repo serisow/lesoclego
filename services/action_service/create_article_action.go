@@ -1,3 +1,17 @@
+// CreateArticleAction prepares content for article creation in Drupal.
+// This is a Drupal-side action service that aggregates content from previous pipeline
+// steps and formats it for Drupal's article creation process. The actual article
+// creation happens in the Drupal environment during the final execution phase.
+//
+// Workflow:
+// 1. Collects content from required previous steps
+// 2. Aggregates and formats the content
+// 3. Returns the prepared content for Drupal to process
+//
+// The execution results will be processed by Drupal's PipelineExecutionController
+// which handles the actual article creation using Drupal's entity API.
+
+
 package action_service
 
 import (
@@ -29,4 +43,8 @@ func (a *CreateArticleAction) Execute(ctx context.Context, actionConfig string, 
     result := content // For simplicity, we'll just return the content.
 
     return result, nil
+}
+
+func (a *CreateArticleAction) CanHandle(actionService string) bool {
+    return actionService == "create_article_action"
 }

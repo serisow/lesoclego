@@ -83,13 +83,22 @@ func ExecutePipeline(executionID string, p *pipeline_type.Pipeline, registry *pl
             s.LLMServiceInstance = llmServiceInstance
         case *action_step.ActionStepImpl:
             s.PipelineStep = pipelineStep
-            // Additional setup for action service
-            actionServiceName := pipelineStep.ActionConfig
-            actionServiceInstance, ok := registry.GetActionService(actionServiceName)
-            if !ok {
-                return fmt.Errorf("unknown Action service: %s", actionServiceName)
+            if pipelineStep.ActionDetails == nil {
+                // Backward compatibility: treat as Drupal-side action
+                s.PipelineStep.ActionDetails = &pipeline_type.ActionDetails{
+                    ActionService: pipelineStep.ActionConfig,
+                    ExecutionLocation: "drupal",
+                    Configuration: map[string]interface{}{},
+                }
+            } else if pipelineStep.ActionDetails.ExecutionLocation == "go" {
+                // Only validate and set action service for Go-side actions
+                actionServiceName := pipelineStep.ActionDetails.ActionService
+                actionServiceInstance, ok := registry.GetActionService(actionServiceName)
+                if !ok {
+                    return fmt.Errorf("unknown Go-side Action service: %s", actionServiceName)
+                }
+                s.ActionServiceInstance = actionServiceInstance
             }
-            s.ActionServiceInstance = actionServiceInstance
         default:
             // Attempt to set the PipelineStep field directly
             if err := setPipelineStepField(step, pipelineStep); err != nil {
@@ -113,6 +122,12 @@ func ExecutePipeline(executionID string, p *pipeline_type.Pipeline, registry *pl
 			"output_type":      pipelineStep.OutputType,
 			"error_message":    "",
 		}
+
+        // Add execution location for action steps
+        if pipelineStep.Type == "action_step" && pipelineStep.ActionDetails != nil {
+            stepResult["execution_location"] = pipelineStep.ActionDetails.ExecutionLocation
+            stepResult["action_service"] = pipelineStep.ActionDetails.ActionService
+        }
 
         if err != nil {
             stepResult["status"] = "failed"

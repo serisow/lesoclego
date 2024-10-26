@@ -1,3 +1,16 @@
+// FetchTaxonomyAction prepares content for taxonomy operations in Drupal.
+// This is a Drupal-side action that processes content from previous steps
+// to prepare it for taxonomy operations. The actual taxonomy operations
+// are performed in the Drupal environment.
+//
+// Workflow:
+// 1. Collects content from required previous steps
+// 2. Aggregates and formats the content
+// 3. Returns the prepared content for Drupal to process
+//
+// The execution results will be processed by Drupal's PipelineExecutionController
+
+
 package action_service
 
 import (
@@ -25,8 +38,11 @@ func (a *FetchTaxonomyAction) Execute(ctx context.Context, actionConfig string, 
         content += fmt.Sprintf("%v", stepOutput)
     }
 
-    // Here you can add logic to create the article using `content`.
-    result := content // For simplicity, we'll just return the content.
+    result := content
 
     return result, nil
+}
+
+func (a *FetchTaxonomyAction) CanHandle(actionService string) bool {
+    return actionService == "fetch_taxonomy_action"
 }

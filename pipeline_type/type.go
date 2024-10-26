@@ -34,7 +34,16 @@ type PipelineStep struct {
 	UUID             string                 `json:"uuid"`
 	LLMServiceConfig map[string]interface{} `json:"llm_service,omitempty"`
 	ActionConfig     string                 `json:"action_config,omitempty"`
+	ActionDetails    *ActionDetails   `json:"action_details,omitempty"`
 	GoogleSearchConfig *GoogleSearchConfig   `json:"google_search_config,omitempty"`
+}
+
+type ActionDetails struct {
+    ID                string                 `json:"id"`
+    Label             string                 `json:"label"`
+    ActionService     string                 `json:"action_service"`
+    ExecutionLocation string                 `json:"execution_location"`
+    Configuration     map[string]interface{} `json:"configuration"`
 }
 
 type GoogleSearchConfig struct {
