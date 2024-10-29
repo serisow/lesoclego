@@ -105,7 +105,7 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("process_data_action", &action_service.ProcessDataActionService{})
 	registry.RegisterActionService("post_tweet", action_service.NewPostTweetActionService(logger))
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
-
+	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
 	//// THESE ARE DRUPAL SIDE ACTION SERVICE, WILL ONLY RUN ON DRUPAL
 	//registry.RegisterActionService("create_article_action", &action_service.CreateArticleAction{})
 	//registry.RegisterActionService("update_entity_action", &action_service.UpdateEntityAction{})
