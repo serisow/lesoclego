@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +17,8 @@ import (
 
 
 func TestShouldRun(t *testing.T) {
+	os.Setenv("GO_ENVIRONMENT", "test")
+
 	tests := []struct {
 		name     string
 		pipeline ScheduledPipeline

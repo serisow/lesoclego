@@ -1,6 +1,3 @@
-// Package action_service provides implementations of various pipeline action services.
-
-
 package action_service
 
 import (
@@ -8,7 +5,6 @@ import (
 
 	"github.com/serisow/lesocle/pipeline_type"
 )
-
 
 type ActionService interface {
     // Execute processes an action step
