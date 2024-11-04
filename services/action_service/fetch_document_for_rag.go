@@ -86,50 +86,100 @@ func (s *DocumentFetchActionService) Execute(ctx context.Context, actionConfig s
         // Download file from Drupal
         docAbsPath := fmt.Sprintf("%s%s", drupalURL, doc.URI);
         fileResp, err := s.httpClient.Get(docAbsPath)
+
+        // Handle file download failure
         if err != nil {
             s.logger.Error("Failed to download file from Drupal",
                 slog.String("filename", doc.Filename),
                 slog.String("uri", doc.URI),
                 slog.String("error", err.Error()))
+            
+            // Add failed document to results
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,  // Will become NULL in Drupal
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
             continue
         }
         
+        // Handle non-200 status code
         if fileResp.StatusCode != http.StatusOK {
             s.logger.Error("Failed to download file from Drupal - non-200 status",
                 slog.String("filename", doc.Filename),
                 slog.String("uri", doc.URI),
                 slog.Int("status", fileResp.StatusCode))
             fileResp.Body.Close()
+            
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
             continue
         }
+
 
         // Create form data for ragone service
         form := &bytes.Buffer{}
         writer := multipart.NewWriter(form)
         
         fw, err := writer.CreateFormFile("file", filepath.Base(doc.Filename))
+
         if err != nil {
             s.logger.Error("Failed to create form file",
                 slog.String("filename", doc.Filename),
                 slog.String("error", err.Error()))
             fileResp.Body.Close()
+            
+            // Handle form creation failure
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
             continue
         }
         
+        
         // Copy file content to form
         written, err := io.Copy(fw, fileResp.Body)
-        fileResp.Body.Close() // Close file response body after copy
+        fileResp.Body.Close()
 
         if err != nil {
             s.logger.Error("Failed to copy file content",
                 slog.String("filename", doc.Filename),
                 slog.String("error", err.Error()))
+            
+            // Handle copy failure
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
             continue
         }
 
         if written == 0 {
             s.logger.Error("No content copied from file",
                 slog.String("filename", doc.Filename))
+            
+            // Handle zero bytes copied
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
             continue
         }
         
@@ -138,10 +188,20 @@ func (s *DocumentFetchActionService) Execute(ctx context.Context, actionConfig s
         // Create request to ragone service
         uploadURL := fmt.Sprintf("%s/api/v1/upload", strings.TrimRight(ragServiceURL, "/"))
         req, err := http.NewRequestWithContext(ctx, "POST", uploadURL, form)
+
         if err != nil {
             s.logger.Error("Failed to create request",
                 slog.String("filename", doc.Filename),
                 slog.String("error", err.Error()))
+            
+            // Handle request creation failure
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
             continue
         }
 
@@ -149,33 +209,63 @@ func (s *DocumentFetchActionService) Execute(ctx context.Context, actionConfig s
 
         // Send request to ragone
         resp, err := s.httpClient.Do(req)
+
         if err != nil {
             s.logger.Error("Failed to upload to RAG service",
                 slog.String("filename", doc.Filename),
                 slog.String("error", err.Error()))
+            
+            // CHANGE 7: Handle upload failure
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
             continue
         }
 
-        // Parse ragone response
-        var result struct {
-            Message    string `json:"message"`
-            DocumentID int    `json:"documentID"`
-        }
+        // Parse RAG response
+        var result pipeline_type.RAGResponse
+
 
         if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
             s.logger.Error("Failed to decode RAG service response",
                 slog.String("filename", doc.Filename),
                 slog.String("error", err.Error()))
             resp.Body.Close()
+            
+            // Handle response parsing failure
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
             continue
         }
         resp.Body.Close()
+
+        // Handle RAG service failure response
+        if result.Status == "failed" || result.Error != "" {
+            results = append(results, map[string]interface{}{
+                "mid":         doc.MID,
+                "filename":    doc.Filename,
+                "document_id": nil,
+                "status":     "failed",
+                "metadata":   map[string]interface{}{},
+            })
+            continue
+        }
 
         results = append(results, map[string]interface{}{
             "mid":         doc.MID,
             "filename":    doc.Filename,
             "document_id": result.DocumentID,
             "status":     "indexed",
+            "metadata":   result.Metadata,
         })
 
         s.logger.Info("Successfully indexed document",
@@ -198,3 +288,4 @@ func (s *DocumentFetchActionService) Execute(ctx context.Context, actionConfig s
 func (s *DocumentFetchActionService) CanHandle(actionService string) bool {
     return actionService == "document_fetch"
 }
+
