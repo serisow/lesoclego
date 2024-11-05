@@ -35,10 +35,15 @@ func (s *DocumentFetchActionService) Execute(ctx context.Context, actionConfig s
     }
 
     config := step.ActionDetails.Configuration
-    drupalURL, ok := config["drupal_url"].(string)
-    if !ok {
+
+    // @TODO 
+    //drupalURL, ok := config["drupal_url"].(string)
+
+    drupalURL := "http://lesocle_apache"  // This is the way to designate the drupal host
+
+    /*if !ok {
         return "", fmt.Errorf("drupal_url not found in config")
-    }
+    }*/
     batchSize := config["batch_size"].(string)
     statusFilter := config["status_filter"].(string)
 
@@ -54,7 +59,11 @@ func (s *DocumentFetchActionService) Execute(ctx context.Context, actionConfig s
         return "", fmt.Errorf("failed to create fetch request: %w", err)
     }
 
+    // Add host header
+    req.Host = "lesocle-dev.sa"  // Add this line
+
     resp, err := s.httpClient.Do(req)
+
     if err != nil {
         return "", fmt.Errorf("failed to fetch documents: %w", err)
     }
@@ -81,7 +90,19 @@ func (s *DocumentFetchActionService) Execute(ctx context.Context, actionConfig s
     for _, doc := range docsData.Documents {
         // Download file from Drupal
         docAbsPath := fmt.Sprintf("%s%s", drupalURL, doc.URI)
-        fileResp, err := s.httpClient.Get(docAbsPath)
+        fileReq, err := http.NewRequest("GET", docAbsPath, nil)
+        if err != nil {
+            s.logger.Error("Failed to create download request",
+                slog.String("filename", doc.Filename),
+                slog.String("uri", doc.URI),
+                slog.String("error", err.Error()))
+            continue
+        }
+
+        // Add host header
+        fileReq.Host = "lesocle-dev.sa"  // Add this line
+
+        fileResp, err := s.httpClient.Do(fileReq)
 
         if err != nil {
             s.logger.Error("Failed to download file from Drupal",

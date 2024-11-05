@@ -79,11 +79,23 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) fetchScheduledPipelines() ([]*ScheduledPipeline, error) {
 	url := fmt.Sprintf("%s/%s", s.apiEndpoint, "pipelines/scheduled")
-    resp, err := http.Get(url)
+
+    // Create a new request instead of using http.Get
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return nil, fmt.Errorf("HTTP request creation failed: %v", err)
+    }
+    
+    // Add the Host header
+    req.Host = "lesocle-dev.sa"
+    
+    // Use http.DefaultClient to make the request
+    resp, err := http.DefaultClient.Do(req)
     if err != nil {
         return nil, fmt.Errorf("HTTP GET request failed: %v", err)
     }
     defer resp.Body.Close()
+    
 
     body, err := io.ReadAll(resp.Body)
     if err != nil {
@@ -154,10 +166,21 @@ func (s *Scheduler) executePipeline(pipelineID string) {
 
 func fetchFullPipeline(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
     url := fmt.Sprintf("%s/%s/%s", apiEndpoint, "pipelines", id)
-    resp, err := http.Get(url)
+    // Create a new request instead of using http.Get
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return pipeline_type.Pipeline{}, fmt.Errorf("HTTP request creation failed: %v", err)
+    }
+    
+    // Add the Host header
+    req.Host = "lesocle-dev.sa"
+    
+    // Use http.DefaultClient to make the request
+    resp, err := http.DefaultClient.Do(req)
     if err != nil {
         return pipeline_type.Pipeline{}, fmt.Errorf("HTTP GET request failed: %v", err)
     }
+	
     defer resp.Body.Close()
 
     // Check for non-200 status codes

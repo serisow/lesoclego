@@ -198,6 +198,8 @@ func SendExecutionResults(pipelineID string, results map[string]interface{}, sta
         return fmt.Errorf("error creating request: %w", err)
     }
 
+    // Add the Host header
+    req.Host = cfg.APIHost  // Add this line
     req.Header.Set("Content-Type", "application/json")
     //req.SetBasicAuth(config.DrupalUsername, config.DrupalPassword)
 
