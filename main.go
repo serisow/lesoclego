@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
+	"github.com/serisow/lesocle/db"
 	"github.com/serisow/lesocle/llm_step"
 	"github.com/serisow/lesocle/logging"
 	"github.com/serisow/lesocle/pipeline"
@@ -22,6 +23,7 @@ import (
 	//"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/llm_service"
+	"github.com/serisow/lesocle/services/rag_service"
 
 	"github.com/urfave/negroni"
 )
@@ -34,10 +36,20 @@ func main() {
     if err != nil {
         log.Fatalf("Failed to initialize logger: %v", err)
     }
+    
+    db, err :=db.Connect()
+    if err != nil {
+        log.Fatalf("Failed to connect to database: %v", err)
+    }
+    defer db.Close()
+
+    // Initialize document processor
+    docProcessor := rag_service.NewProcessor(db, logger)
+
 
 	// Initialize PluginRegistry
 	registry := plugin_registry.NewPluginRegistry()
-	registerStepTypes(registry, logger)
+	registerStepTypes(registry, logger, docProcessor)
 
 	// Initialize scheduler with PluginRegistry
 	s := scheduler.New(cfg.APIEndpoint, cfg.CheckInterval, registry)
@@ -79,7 +91,7 @@ func setupNegroni(r *mux.Router) *negroni.Negroni {
 	return n
 }
 
-func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Logger) {
+func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Logger, processor *rag_service.Processor) {
 	// Register the Step Types
 	registry.RegisterStepType("llm_step", func() step.Step {
 		return &llm_step.LLMStepImpl{
@@ -105,7 +117,7 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("post_tweet", action_service.NewPostTweetActionService(logger))
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
-    registry.RegisterActionService("document_fetch", action_service.NewDocumentFetchActionService(logger))
+    registry.RegisterActionService("document_fetch", action_service.NewDocumentFetchActionService(logger, processor))
 }
 
 func initLogger() (*slog.Logger, error) {

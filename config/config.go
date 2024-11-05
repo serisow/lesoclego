@@ -9,6 +9,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
+type VectorStore struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	DBName   string
+}
+
 type Config struct {
 	Environment                string
 	APIEndpoint                string
@@ -36,6 +44,7 @@ func init() {
 }
 
 func Load() Config {
+
 	return Config{
 		Environment:                getEnv("ENVIRONMENT", "development"),
 		APIEndpoint:                getEnv("API_ENDPOINT", "http://lesocle-dev.sa:9090/api"),

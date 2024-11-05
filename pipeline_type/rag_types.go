@@ -1,9 +1,19 @@
 package pipeline_type
 
+import "github.com/pgvector/pgvector-go"
+
 
 type ProcessingStats struct {
     ExtractionTime float64 `json:"extraction_time"`
     EmbeddingTime  float64 `json:"embedding_time"`
+}
+
+
+type Document struct {
+    ID        int
+    Filename  string
+    Content   string
+    Embedding *pgvector.Vector
 }
 
 type DocumentMetadata struct {
