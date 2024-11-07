@@ -4,3 +4,4 @@ launch.json
 output
 lesocle
 logs
+./db _data/

@@ -61,7 +61,7 @@ func main() {
     pipeline.StartExecutionStoreCleanup(executionResultRetention, cleanupInterval)
 
 	// Initialize server
-	r := server.SetupRoutes(cfg.APIEndpoint, registry)
+	r := server.SetupRoutes(cfg.APIEndpoint, registry, logger, db)
 	n := setupNegroni(r)
 
 	if cfg.Environment == "production" {

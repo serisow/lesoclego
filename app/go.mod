@@ -7,6 +7,7 @@ toolchain go1.23.1
 require (
 	code.sajari.com/docconv/v2 v2.0.0-pre.4
 	github.com/PuerkitoBio/goquery v1.10.0
+	github.com/davecgh/go-spew v1.1.1
 	github.com/gorilla/mux v1.8.1
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/ledongthuc/pdf v0.0.0-20240201131950-da5b75280b06

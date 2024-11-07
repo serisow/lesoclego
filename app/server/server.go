@@ -3,10 +3,12 @@ package server
 import (
 	"crypto/tls"
 	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/serisow/lesocle/handlers"
 	"github.com/serisow/lesocle/plugin_registry"
 	"github.com/urfave/negroni"
@@ -23,7 +25,7 @@ type Config struct {
 	WriteTimeout time.Duration
 }
 
-func SetupRoutes(apiEndpoint string, registry *plugin_registry.PluginRegistry) *mux.Router {
+func SetupRoutes(apiEndpoint string, registry *plugin_registry.PluginRegistry, logger *slog.Logger, db *pgxpool.Pool) *mux.Router {
 	r := mux.NewRouter()
 
 	// New route for on-demand pipeline execution
@@ -31,6 +33,11 @@ func SetupRoutes(apiEndpoint string, registry *plugin_registry.PluginRegistry) *
 	r.HandleFunc("/pipeline/{id}/execute", pipelineHandler.ExecutePipeline).Methods("POST")
 	r.HandleFunc("/pipeline/{id}/execution/{execution_id}/status", pipelineHandler.GetExecutionStatus).Methods("GET")
     r.HandleFunc("/pipeline/{id}/execution/{execution_id}/results", pipelineHandler.GetExecutionResults).Methods("GET")
+
+	// Add document search route
+    documentSearchHandler := handlers.NewDocumentSearchHandler(db, logger)
+    r.Handle("/documents/search", documentSearchHandler).Methods("POST")
+
 	return r
 }
 
