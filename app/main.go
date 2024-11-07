@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"net/http"
@@ -43,6 +44,25 @@ func main() {
         log.Fatalf("Failed to connect to database: %v", err)
     }
     defer db.Close()
+
+	// In main.go or wherever you initialize your services
+	indexManager := rag_service.NewIndexManager(db, logger)
+	err = indexManager.CreateOrUpdateIndex(context.Background())
+	if err != nil {
+		logger.Error("Failed to create vector index", 
+			slog.String("error", err.Error()))
+	}
+
+	// Optionally, set up periodic index maintenance
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		for range ticker.C {
+			if err := indexManager.ReindexIfNeeded(context.Background()); err != nil {
+				logger.Error("Failed to maintain vector index",
+					slog.String("error", err.Error()))
+			}
+		}
+	}()
 
     // Initialize document processor
     docProcessor := rag_service.NewProcessor(db, logger)

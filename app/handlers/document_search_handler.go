@@ -151,7 +151,8 @@ func (h *DocumentSearchHandler) BuildSearchQuery(req *SearchRequest, embedding i
         Args: make([]interface{}, 0),
     }
 
-    // Use CTE for clarity and to allow filtering by similarity score
+    // Base query using CTE and ivfflat index
+    // Note the addition of the index hint /*+ IndexScan(d idx_documents_embedding) */
     qb.Query = `
         WITH scored_documents AS (
             SELECT 
@@ -168,6 +169,11 @@ func (h *DocumentSearchHandler) BuildSearchQuery(req *SearchRequest, embedding i
             FROM 
                 documents d
             WHERE 1=1
+            AND CASE 
+                WHEN $1 = 'cosine' THEN d.embedding <=> $2 <= 0.8
+                WHEN $1 = 'euclidean' THEN d.embedding <-> $2 <= 5.0
+                ELSE TRUE
+            END
     `
     qb.Args = append(qb.Args, req.Config.SimilarityMetric, embedding)
 
@@ -180,7 +186,7 @@ func (h *DocumentSearchHandler) BuildSearchQuery(req *SearchRequest, embedding i
 
     qb.Query += ")"
 
-    // Now we can filter by similarity_score
+    // Now filter by similarity_score
     similarityThreshold, _ := strconv.ParseFloat(req.Config.SimilarityThreshold, 64)
     qb.Query += fmt.Sprintf("\nSELECT * FROM scored_documents WHERE similarity_score >= $%d", len(qb.Args)+1)
     qb.Args = append(qb.Args, similarityThreshold)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/serisow/lesocle/handlers"
 	"github.com/serisow/lesocle/pipeline_type"
@@ -23,8 +22,6 @@ func (s *DocumentSearchStepImpl) Execute(ctx context.Context, pipelineContext *p
     if s.DB == nil {
         return fmt.Errorf("database connection not initialized for document search step")
     }
-
-	spew.Dump(s.PipelineStep)
 	
     // Check if SearchSettings and ContentSettings are initialized
     if s.PipelineStep.DocumentSearchSettings == nil {
