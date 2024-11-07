@@ -11,54 +11,69 @@ type ScheduledPipeline struct {
 
 // The full pipeline data
 type Pipeline struct {
-	ID            string         `json:"id"`
-	Label         string         `json:"label"`
-	Steps         []PipelineStep `json:"steps"`
-	ScheduledTime int64          `json:"scheduled_time"`
-	ExecutionFailures int           `json:"execution_failures"`
-	LLMServices   map[string]llm_service.LLMService
-	Context       *Context
+	ID                string         `json:"id"`
+	Label             string         `json:"label"`
+	Steps             []PipelineStep `json:"steps"`
+	ScheduledTime     int64          `json:"scheduled_time"`
+	ExecutionFailures int            `json:"execution_failures"`
+	LLMServices       map[string]llm_service.LLMService
+	Context           *Context
 }
 
 type PipelineStep struct {
-	ID               string                 `json:"id"`
-	Type             string                 `json:"type"`
-	Weight           int                    `json:"weight"`
-	StepDescription  string                 `json:"step_description"`
-	StepOutputKey    string                 `json:"step_output_key"`
-	OutputType       string                 `json:"output_type"`
-    RequiredSteps    string                 `json:"required_steps"`
-	LLMConfig        string                 `json:"llm_config,omitempty"`
-	Prompt           string                 `json:"prompt,omitempty"`
-	Response         string                 `json:"response,omitempty"`
-	UUID             string                 `json:"uuid"`
-	LLMServiceConfig map[string]interface{} `json:"llm_service,omitempty"`
-	ActionConfig     string                 `json:"action_config,omitempty"`
-	ActionDetails    *ActionDetails   `json:"action_details,omitempty"`
-	GoogleSearchConfig *GoogleSearchConfig   `json:"google_search_config,omitempty"`
+	ID                     string                  `json:"id"`
+	Type                   string                  `json:"type"`
+	Weight                 int                     `json:"weight"`
+	StepDescription        string                  `json:"step_description"`
+	StepOutputKey          string                  `json:"step_output_key"`
+	OutputType             string                  `json:"output_type"`
+	RequiredSteps          string                  `json:"required_steps"`
+	LLMConfig              string                  `json:"llm_config,omitempty"`
+	Prompt                 string                  `json:"prompt,omitempty"`
+	Response               string                  `json:"response,omitempty"`
+	UUID                   string                  `json:"uuid"`
+	LLMServiceConfig       map[string]interface{}  `json:"llm_service,omitempty"`
+	ActionConfig           string                  `json:"action_config,omitempty"`
+	ActionDetails          *ActionDetails          `json:"action_details,omitempty"`
+	GoogleSearchConfig     *GoogleSearchConfig     `json:"google_search_config,omitempty"`
+	SearchInput            string                  `json:"search_input,omitempty"`
+	DocumentSearchSettings *DocumentSearchSettings `json:"document_search_settings,omitempty"`
+	ContentSearchSettings  *ContentSearchSettings  `json:"content_search_settings,omitempty"`
 }
 
 type ActionDetails struct {
-    ID                string                 `json:"id"`
-    Label             string                 `json:"label"`
-    ActionService     string                 `json:"action_service"`
-    ExecutionLocation string                 `json:"execution_location"`
-    Configuration     map[string]interface{} `json:"configuration"`
+	ID                string                 `json:"id"`
+	Label             string                 `json:"label"`
+	ActionService     string                 `json:"action_service"`
+	ExecutionLocation string                 `json:"execution_location"`
+	Configuration     map[string]interface{} `json:"configuration"`
 }
 
 type GoogleSearchConfig struct {
-    Query          string             `json:"query"`
-    Category       string             `json:"category"`
-    AdvancedParams GoogleSearchParams `json:"advanced_params"`
+	Query          string             `json:"query"`
+	Category       string             `json:"category"`
+	AdvancedParams GoogleSearchParams `json:"advanced_params"`
 }
 
 type GoogleSearchParams struct {
-    NumResults   string `json:"num_results"`
-    DateRestrict string `json:"date_restrict"`
-    Sort         string `json:"sort"`
-    Language     string `json:"language"`
-    Country      string `json:"country"`
-    SiteSearch   string `json:"site_search"`
-    FileType     string `json:"file_type"`
-    SafeSearch   string `json:"safe_search"`
+	NumResults   string `json:"num_results"`
+	DateRestrict string `json:"date_restrict"`
+	Sort         string `json:"sort"`
+	Language     string `json:"language"`
+	Country      string `json:"country"`
+	SiteSearch   string `json:"site_search"`
+	FileType     string `json:"file_type"`
+	SafeSearch   string `json:"safe_search"`
+}
+
+type DocumentSearchSettings struct {
+	SimilarityThreshold string `json:"similarity_threshold"`
+	MaxResults          string `json:"max_results"`
+	SimilarityMetric    string `json:"similarity_metric"`
+}
+
+type ContentSearchSettings struct {
+	IncludeMetadata    int    `json:"include_metadata"`
+	MinWordCount       string `json:"min_word_count"`
+	ExcludeAlreadyUsed int    `json:"exclude_already_used"`
 }

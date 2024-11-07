@@ -11,6 +11,7 @@ import (
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
 	"github.com/serisow/lesocle/db"
+	"github.com/serisow/lesocle/document_search_step"
 	"github.com/serisow/lesocle/llm_step"
 	"github.com/serisow/lesocle/logging"
 	"github.com/serisow/lesocle/pipeline"
@@ -104,6 +105,13 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterStepType("google_search", func() step.Step {
         return &search_step.GoogleSearchStepImpl{}
     })
+	// In main.go registerStepTypes function
+	registry.RegisterStepType("document_search", func() step.Step {
+		return &document_search_step.DocumentSearchStepImpl{
+			Logger: logger,
+			DB:     processor.GetDB(),
+		}
+	})
 
 	// Register the LLM Services
 	registry.RegisterLLMService("openai", llm_service.NewOpenAIService(logger))

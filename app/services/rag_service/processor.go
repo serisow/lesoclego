@@ -104,3 +104,7 @@ func getMimeType(ext string) string {
     }
     return "application/octet-stream" // default mime type
 }
+
+func (p *Processor) GetDB() *pgxpool.Pool {
+    return p.db
+}
