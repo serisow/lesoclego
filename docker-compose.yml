@@ -1,28 +1,4 @@
 services:
-  db:
-    build:
-      context: ./docker/postgres
-    volumes:
-      - "./db_data:/var/lib/postgresql/data"
-      - "./docker/postgres/init-scripts:/docker-entrypoint-initdb.d"
-    networks:
-      - lesocle-shared-network
-
-    environment:
-      POSTGRES_DB: $DB_NAME
-      POSTGRES_USER: $DB_USER
-      POSTGRES_PASSWORD: $DB_PASSWORD
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    container_name: lesoclego_postgres
-    ports:
-      - "5432:5432"
-    tty: true
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $DB_USER -d $DB_NAME"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
   app:
     container_name: lesoclego_app
     build:
@@ -32,20 +8,15 @@ services:
       - "./.env:/go/.env"    # Environment file
 
     networks:
-      - lesoclego_internal
       - lesocle-shared-network
     extra_hosts:
       - "lesocle-dev.sa:192.168.80.2"  # IP of Traefik in the shared network
     ports:
       - "8086:80"
     tty: true
-    depends_on:
-      - db
+
     environment:
-      DATABASE_URL: "${DATABASE_URL}"
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
-      # Use the full container name from Drupal
-      API_ENDPOINT: "http://${DRUPAL_PROJECT_NAME}_apache/api"
 
     labels:
       - "traefik.enable=true"
@@ -54,65 +25,12 @@ services:
     command: ["./lesoclego"] #execute mon go binary
     # consider entrypoint and how to pass argument to command from outside
 
-  ###########
-  # pgAdmin #
-  ###########
-  pgadmin:
-    container_name: lesoclego_pgadmin
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-      # Add these lines to reduce logging
-      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 50  # CRITICAL level only
-      PGADMIN_CONFIG_FILE_LOG_LEVEL: 50     # CRITICAL level only
-      GUNICORN_ACCESS_LOGFILE: /dev/null
-    ports:
-      - "5050:80"
-    depends_on:
-      - db
-    networks:
-      - lesoclego_internal
-      - lesocle-shared-network
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    labels:
-      - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.lesoclego-dev.sa`)"
-      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
-      - "traefik.enable=true"
 
 
-  ###########
-  # Traefik #
-  ###########
-#  traefik:
-#    image: traefik:v2.1
-#    container_name: lesoclego_traefik
-#    command:
-#      - --api.insecure=true
-#      - --providers.docker
-#      - --providers.docker.exposedByDefault=false
-#      - --providers.docker.network=lesocle-shared-network
-#      - --entrypoints.lesoclego.address=:80
-#    ports:
-#      - 81:80  # Changed port
-#      - 8081:8000  # Changed dashboard port
-#    networks:
-#      - lesocle-shared-network
-#    volumes:
-#      - /var/run/docker.sock:/var/run/docker.sock 
 # --------- #
 # Networks  #
 # --------- #
 networks:
-  lesoclego_internal:
   lesocle-shared-network:
     external: true
 
-
-
-# --------- #
-# Volumes   #
-# --------- #
-volumes:
-  pgadmin_data:

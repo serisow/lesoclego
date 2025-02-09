@@ -290,7 +290,7 @@ func TestExecutePipeline(t *testing.T) {
     wg.Add(1)
 
     // Mock fetchFullPipeline function
-    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
+    mockFetchFullPipeline := func(id, apiHost, apiEndpoint string) (pipeline_type.Pipeline, error) {
         if id != "test-pipeline" {
             t.Errorf("Expected pipeline ID 'test-pipeline', got '%s'", id)
         }
@@ -364,7 +364,7 @@ func TestExecutePipelineConcurrency(t *testing.T) {
     var wg sync.WaitGroup
 
     // Mock functions
-    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
+    mockFetchFullPipeline := func(id, apiHost, apiEndpoint string) (pipeline_type.Pipeline, error) {
         return pipeline_type.Pipeline{ID: id}, nil
     }
 
@@ -406,7 +406,7 @@ func TestExecutePipelineConcurrency(t *testing.T) {
 
 func TestExecutePipelineExecutionError(t *testing.T) {
     // Mock functions
-    mockFetchFullPipeline := func(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
+    mockFetchFullPipeline := func(id, apiHost, apiEndpoint string) (pipeline_type.Pipeline, error) {
         return pipeline_type.Pipeline{ID: id}, nil
     }
 
@@ -520,7 +520,7 @@ func TestFetchFullPipeline(t *testing.T) {
             defer mockServer.Close()
 
             // Call the function under test
-            p, err := fetchFullPipeline(tc.pipelineID, mockServer.URL)
+            p, err := fetchFullPipeline(tc.pipelineID, "", mockServer.URL)
 
             if tc.expectError {
                 if err == nil {

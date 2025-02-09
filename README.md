@@ -15,3 +15,8 @@ curl -X POST http://localhost:8086/pipeline/test_first_on_demand/execute \
 http://localhost:8086/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/results
 http://localhost:8086/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/status
 
+
+
+
+# Backup from inside the container
+docker exec lesoclego_postgres pg_dump -U $DB_USER -d $DB_NAME -F c -b -v > ./backups/backup_$(date +%Y%m%d_%H%M%S).dump

@@ -5,3 +5,4 @@ output
 lesocle
 logs
 ./db _data/
+backups/

@@ -37,8 +37,6 @@ type PipelineStep struct {
 	ActionDetails          *ActionDetails          `json:"action_details,omitempty"`
 	GoogleSearchConfig     *GoogleSearchConfig     `json:"google_search_config,omitempty"`
 	SearchInput            string                  `json:"search_input,omitempty"`
-	DocumentSearchSettings *DocumentSearchSettings `json:"document_search_settings,omitempty"`
-	ContentSearchSettings  *ContentSearchSettings  `json:"content_search_settings,omitempty"`
 }
 
 type ActionDetails struct {

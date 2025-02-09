@@ -21,10 +21,11 @@ const (
 
 
 type Scheduler struct {
+	apiHost       string
 	apiEndpoint   string
 	checkInterval time.Duration
 	registry      *plugin_registry.PluginRegistry
-	fetchPipelineFunc  func(id, apiEndpoint string) (pipeline_type.Pipeline, error)
+	fetchPipelineFunc  func(id,apiHost, apiEndpoint string) (pipeline_type.Pipeline, error)
     executePipelineFunc func(executionID string, p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error
 	onPipelineComplete func(pipelineID string)
 
@@ -45,8 +46,9 @@ type ScheduledPipeline struct {
 }
 
 
-func New(apiEndpoint string, checkInterval time.Duration, registry *plugin_registry.PluginRegistry) *Scheduler {
+func New(apiHost, apiEndpoint string, checkInterval time.Duration, registry *plugin_registry.PluginRegistry) *Scheduler {
 	return &Scheduler{
+		apiHost: apiHost,
 		apiEndpoint:   apiEndpoint,
 		checkInterval: checkInterval,
 		registry:      registry,
@@ -87,7 +89,7 @@ func (s *Scheduler) fetchScheduledPipelines() ([]*ScheduledPipeline, error) {
     }
     
     // Add the Host header
-    req.Host = "lesocle-dev.sa"
+    req.Host = s.apiHost
     
     // Use http.DefaultClient to make the request
     resp, err := http.DefaultClient.Do(req)
@@ -120,7 +122,7 @@ func (s *Scheduler) executePipeline(pipelineID string) {
     s.runningPipelines[pipelineID] = struct{}{}
     s.runningPipelinesMutex.Unlock()
 
-    fullPipeline, err := s.fetchPipelineFunc(pipelineID, s.apiEndpoint)
+    fullPipeline, err := s.fetchPipelineFunc(pipelineID, s.apiHost, s.apiEndpoint)
     if err != nil {
         log.Printf("Error fetching full pipeline %s: %v", pipelineID, err)
         // Remove from runningPipelines since execution won't proceed
@@ -164,7 +166,7 @@ func (s *Scheduler) executePipeline(pipelineID string) {
     }()
 }
 
-func fetchFullPipeline(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
+func fetchFullPipeline(id, apiHost, apiEndpoint string) (pipeline_type.Pipeline, error) {
     url := fmt.Sprintf("%s/%s/%s", apiEndpoint, "pipelines", id)
     // Create a new request instead of using http.Get
     req, err := http.NewRequest("GET", url, nil)
@@ -173,7 +175,7 @@ func fetchFullPipeline(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
     }
     
     // Add the Host header
-    req.Host = "lesocle-dev.sa"
+    req.Host = apiHost
     
     // Use http.DefaultClient to make the request
     resp, err := http.DefaultClient.Do(req)
@@ -248,6 +250,6 @@ func (sp *ScheduledPipeline) ShouldRun(now time.Time) bool {
 }
 
 // FetchFullPipeline fetches a full pipeline by ID
-func FetchFullPipeline(id, apiEndpoint string) (pipeline_type.Pipeline, error) {
-	return fetchFullPipeline(id, apiEndpoint)
+func FetchFullPipeline(id, apiHost, apiEndpoint string) (pipeline_type.Pipeline, error) {
+	return fetchFullPipeline(id, apiHost, apiEndpoint)
 }

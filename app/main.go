@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"log/slog"
 	"net/http"
@@ -11,8 +10,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/serisow/lesocle/action_step"
 	"github.com/serisow/lesocle/config"
-	"github.com/serisow/lesocle/db"
-	"github.com/serisow/lesocle/document_search_step"
 	"github.com/serisow/lesocle/llm_step"
 	"github.com/serisow/lesocle/logging"
 	"github.com/serisow/lesocle/pipeline"
@@ -22,10 +19,8 @@ import (
 	"github.com/serisow/lesocle/search_step"
 	"github.com/serisow/lesocle/server"
 
-	//"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/llm_service"
-	"github.com/serisow/lesocle/services/rag_service"
 
 	"github.com/urfave/negroni"
 )
@@ -39,41 +34,13 @@ func main() {
         log.Fatalf("Failed to initialize logger: %v", err)
     }
     
-    db, err :=db.Connect()
-    if err != nil {
-        log.Fatalf("Failed to connect to database: %v", err)
-    }
-    defer db.Close()
-
-	// In main.go or wherever you initialize your services
-	indexManager := rag_service.NewIndexManager(db, logger)
-	err = indexManager.CreateOrUpdateIndex(context.Background())
-	if err != nil {
-		logger.Error("Failed to create vector index", 
-			slog.String("error", err.Error()))
-	}
-
-	// Optionally, set up periodic index maintenance
-	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		for range ticker.C {
-			if err := indexManager.ReindexIfNeeded(context.Background()); err != nil {
-				logger.Error("Failed to maintain vector index",
-					slog.String("error", err.Error()))
-			}
-		}
-	}()
-
-    // Initialize document processor
-    docProcessor := rag_service.NewProcessor(db, logger)
-
 
 	// Initialize PluginRegistry
 	registry := plugin_registry.NewPluginRegistry()
-	registerStepTypes(registry, logger, docProcessor)
+	registerStepTypes(registry, logger)
 
 	// Initialize scheduler with PluginRegistry
-	s := scheduler.New(cfg.APIEndpoint, cfg.CheckInterval, registry)
+	s := scheduler.New(cfg.APIHost, cfg.APIEndpoint, cfg.CheckInterval, registry)
 	go s.Start()
 
     // Start the execution store cleanup
@@ -82,7 +49,7 @@ func main() {
     pipeline.StartExecutionStoreCleanup(executionResultRetention, cleanupInterval)
 
 	// Initialize server
-	r := server.SetupRoutes(cfg.APIEndpoint, registry, logger, db)
+	r := server.SetupRoutes(cfg.APIHost, cfg.APIEndpoint, registry)
 	n := setupNegroni(r)
 
 	if cfg.Environment == "production" {
@@ -112,7 +79,7 @@ func setupNegroni(r *mux.Router) *negroni.Negroni {
 	return n
 }
 
-func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Logger, processor *rag_service.Processor) {
+func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Logger) {
 	// Register the Step Types
 	registry.RegisterStepType("llm_step", func() step.Step {
 		return &llm_step.LLMStepImpl{
@@ -125,13 +92,7 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterStepType("google_search", func() step.Step {
         return &search_step.GoogleSearchStepImpl{}
     })
-	// In main.go registerStepTypes function
-	registry.RegisterStepType("document_search", func() step.Step {
-		return &document_search_step.DocumentSearchStepImpl{
-			Logger: logger,
-			DB:     processor.GetDB(),
-		}
-	})
+
 
 	// Register the LLM Services
 	registry.RegisterLLMService("openai", llm_service.NewOpenAIService(logger))
@@ -145,7 +106,6 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("post_tweet", action_service.NewPostTweetActionService(logger))
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
-    registry.RegisterActionService("document_fetch", action_service.NewDocumentFetchActionService(logger, processor))
 }
 
 func initLogger() (*slog.Logger, error) {

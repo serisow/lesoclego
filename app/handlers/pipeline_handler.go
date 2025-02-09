@@ -15,12 +15,14 @@ import (
 )
 
 type PipelineHandler struct {
+    APIHost     string
 	APIEndpoint string
 	Registry    *plugin_registry.PluginRegistry
 }
 
-func NewPipelineHandler(apiEndpoint string, registry *plugin_registry.PluginRegistry) *PipelineHandler {
+func NewPipelineHandler(apiHost, apiEndpoint string, registry *plugin_registry.PluginRegistry) *PipelineHandler {
 	return &PipelineHandler{
+        APIHost: apiHost,
 		APIEndpoint: apiEndpoint,
 		Registry:    registry,
 	}
@@ -42,7 +44,7 @@ func (h *PipelineHandler) ExecutePipeline(w http.ResponseWriter, r *http.Request
     }
 
     // Fetch the full pipeline
-    fullPipeline, err := scheduler.FetchFullPipeline(pipelineID, h.APIEndpoint)
+    fullPipeline, err := scheduler.FetchFullPipeline(pipelineID, h.APIHost, h.APIEndpoint)
     if err != nil {
         http.Error(w, fmt.Sprintf("Failed to fetch pipeline: %v", err), http.StatusInternalServerError)
         return
