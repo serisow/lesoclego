@@ -102,8 +102,11 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 
 	// Register Action services
 	
-	// This one is just a placeholder; will be removed
+	// Tweeter action service
 	registry.RegisterActionService("post_tweet", action_service.NewPostTweetActionService(logger))
+	registry.RegisterActionService("search_tweets", action_service.NewSearchTweetsActionService(logger))
+	registry.RegisterActionService("tweet_data_enricher", action_service.NewTweetDataEnricherService(logger))
+
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
 }

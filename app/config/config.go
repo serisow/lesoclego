@@ -48,7 +48,7 @@ func Load() Config {
 
 	return Config{
 		Environment:                getEnv("ENVIRONMENT", "development"),
-		APIEndpoint:   				getEnv("API_ENDPOINT", "lesocle-dev.sa/api"),
+		APIEndpoint:   				getEnv("API_ENDPOINT", "http://lesocle-dev.sa/api"),
 		APIHost:   				    getEnv("API_HOST", "lesocle-dev.sa"),
 		CheckInterval:              time.Duration(getEnvAsInt("CHECK_INTERVAL", 1200)) * time.Second,
 		Domains:                    []string{getEnv("DOMAIN", "example.com")},
