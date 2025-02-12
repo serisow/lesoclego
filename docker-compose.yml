@@ -5,18 +5,14 @@ services:
       context: ./docker/go
     volumes:
       - "./app:/go"
-      - "./.env:/go/.env"    # Environment file
-
+      - "./app/.env:/go/.env"    # Environment file
     networks:
       - lesocle-shared-network
     extra_hosts:
-      - "lesocle-dev.sa:192.168.80.2"  # IP of Traefik in the shared network
+      - "lesocle-dev.sa:192.168.80.4"  # IP of Traefik in the shared network
     ports:
       - "8086:80"
     tty: true
-
-    environment:
-      OPENAI_API_KEY: "${OPENAI_API_KEY}"
 
     labels:
       - "traefik.enable=true"
