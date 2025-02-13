@@ -30,6 +30,8 @@ type Config struct {
 	DrupalPassword             string
 	GoogleCustomSearchAPIKey   string
 	GoogleCustomSearchEngineID string
+	CronURL      string
+    CronInterval time.Duration
 }
 
 var isTest bool
@@ -59,6 +61,8 @@ func Load() Config {
 		DrupalPassword:             getEnv("DRUPAL_PASSWORD", ""),
 		GoogleCustomSearchAPIKey:   getEnv("GoogleCustomSearchAPIKey", ""),
 		GoogleCustomSearchEngineID: getEnv("GoogleCustomSearchEngineID", ""),
+		CronURL:      getEnv("DRUPAL_CRON_URL", ""),
+        CronInterval: time.Duration(getEnvAsInt("CRON_INTERVAL", 300)) * time.Second, // Default 5 minutes
 	}
 }
 

@@ -40,8 +40,10 @@ func main() {
 	registerStepTypes(registry, logger)
 
 	// Initialize scheduler with PluginRegistry
-	s := scheduler.New(cfg.APIHost, cfg.APIEndpoint, cfg.CheckInterval, registry)
+	s := scheduler.New(cfg.APIHost, cfg.APIEndpoint, cfg.CheckInterval, registry, cfg.CronURL, cfg.CronInterval)
+
 	go s.Start()
+	go s.StartCronTrigger() // Start cron trigger
 
     // Start the execution store cleanup
     executionResultRetention := 24 * time.Hour // Retain results for 24 hours

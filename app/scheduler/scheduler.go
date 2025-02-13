@@ -29,6 +29,9 @@ type Scheduler struct {
     executePipelineFunc func(executionID string, p *pipeline_type.Pipeline, registry *plugin_registry.PluginRegistry) error
 	onPipelineComplete func(pipelineID string)
 
+	cronURL        string
+    cronInterval   time.Duration
+
 	runningPipelinesMutex sync.Mutex
     runningPipelines      map[string]struct{}
 
@@ -46,7 +49,7 @@ type ScheduledPipeline struct {
 }
 
 
-func New(apiHost, apiEndpoint string, checkInterval time.Duration, registry *plugin_registry.PluginRegistry) *Scheduler {
+func New(apiHost, apiEndpoint string, checkInterval time.Duration, registry *plugin_registry.PluginRegistry, cronURL string, cronInterval time.Duration) *Scheduler {
 	return &Scheduler{
 		apiHost: apiHost,
 		apiEndpoint:   apiEndpoint,
@@ -55,9 +58,12 @@ func New(apiHost, apiEndpoint string, checkInterval time.Duration, registry *plu
 		fetchPipelineFunc:  fetchFullPipeline,
         executePipelineFunc: pipeline.ExecutePipeline,
 		runningPipelines:     make(map[string]struct{}),
+		cronURL:        cronURL,
+        cronInterval:   cronInterval,
 	}
 }
 
+// Pull the one-time execution pipeline ever x minutes, x is set via .env file.
 func (s *Scheduler) Start() {
 	log.Println("Starting pipeline scheduler...")
 	for {
@@ -78,6 +84,27 @@ func (s *Scheduler) Start() {
 		time.Sleep(s.checkInterval)
 	}
 }
+
+// Query the Drupal cron url, which trigger the Drupal cron every x minutes, set via the .env file.
+
+func (s *Scheduler) StartCronTrigger() {
+    if s.cronURL == "" {
+        log.Println("Cron trigger disabled - no URL configured")
+        return
+    }
+    
+    log.Printf("Starting cron trigger for URL: %s with interval: %v", s.cronURL, s.cronInterval)
+    ticker := time.NewTicker(s.cronInterval)
+    
+    go func() {
+        for range ticker.C {
+            if err := s.triggerCron(); err != nil {
+                log.Printf("Error triggering Drupal cron: %v", err)
+            }
+        }
+    }()
+}
+
 
 func (s *Scheduler) fetchScheduledPipelines() ([]*ScheduledPipeline, error) {
 	url := fmt.Sprintf("%s/%s", s.apiEndpoint, "pipelines/scheduled")
@@ -252,4 +279,31 @@ func (sp *ScheduledPipeline) ShouldRun(now time.Time) bool {
 // FetchFullPipeline fetches a full pipeline by ID
 func FetchFullPipeline(id, apiHost, apiEndpoint string) (pipeline_type.Pipeline, error) {
 	return fetchFullPipeline(id, apiHost, apiEndpoint)
+}
+
+func (s *Scheduler) triggerCron() error {
+    req, err := http.NewRequest("GET", s.cronURL, nil)
+    if err != nil {
+        return fmt.Errorf("failed to create cron request: %w", err)
+    }
+    
+    // Add the Host header if needed
+    if s.apiHost != "" {
+        req.Host = s.apiHost
+    }
+    
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return fmt.Errorf("failed to trigger cron: %w", err)
+    }
+    defer resp.Body.Close()
+    
+    // Consider both 200 OK and 204 No Content as success
+    if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+        body, _ := io.ReadAll(resp.Body)
+        return fmt.Errorf("cron request failed with status %d: %s", resp.StatusCode, string(body))
+    }
+    
+    log.Printf("Successfully triggered Drupal cron at %s", time.Now().Format(time.RFC3339))
+    return nil
 }
