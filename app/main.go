@@ -111,6 +111,10 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
+	
+	// news_api_search
+	registry.RegisterActionService("news_api_search", action_service.NewNewsSearchActionService(logger))
+
 }
 
 func initLogger() (*slog.Logger, error) {
