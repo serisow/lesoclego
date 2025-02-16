@@ -95,6 +95,9 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
         return &search_step.GoogleSearchStepImpl{}
     })
 
+	registry.RegisterStepType("news_api_search", func() step.Step {
+        return &search_step.NewsAPISearchStepImpl{}
+    })
 
 	// Register the LLM Services
 	registry.RegisterLLMService("openai", llm_service.NewOpenAIService(logger))
@@ -112,9 +115,6 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
 	
-	// news_api_search
-	registry.RegisterActionService("news_api_search", action_service.NewNewsSearchActionService(logger))
-
 }
 
 func initLogger() (*slog.Logger, error) {

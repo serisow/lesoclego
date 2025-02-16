@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
-	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -193,18 +191,12 @@ func (s *GoogleSearchStepImpl) fetchExpandedContent(url string) string {
     }
 
     // Clean and truncate the content
-    content = cleanContent(content)
+    content = cleanSearchContent(content)
     if len(content) > 2000 {
         content = content[:2000] + "..."
     }
 
     return content
-}
-
-func cleanContent(content string) string {
-    // Remove extra whitespace
-    content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
-    return strings.TrimSpace(content)
 }
 
 

@@ -9,14 +9,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-type VectorStore struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	DBName   string
-}
-
 type Config struct {
 	Environment                string
 	APIEndpoint                string
@@ -30,6 +22,7 @@ type Config struct {
 	DrupalPassword             string
 	GoogleCustomSearchAPIKey   string
 	GoogleCustomSearchEngineID string
+	NewsAPIKey                 string
 	CronURL      string
     CronInterval time.Duration
 }
@@ -61,8 +54,9 @@ func Load() Config {
 		DrupalPassword:             getEnv("DRUPAL_PASSWORD", ""),
 		GoogleCustomSearchAPIKey:   getEnv("GoogleCustomSearchAPIKey", ""),
 		GoogleCustomSearchEngineID: getEnv("GoogleCustomSearchEngineID", ""),
-		CronURL:      getEnv("DRUPAL_CRON_URL", ""),
-        CronInterval: time.Duration(getEnvAsInt("CRON_INTERVAL", 300)) * time.Second, // Default 5 minutes
+		NewsAPIKey:                 getEnv("NEWS_API_KEY", ""),
+		CronURL:                    getEnv("DRUPAL_CRON_URL", ""),
+        CronInterval: 				time.Duration(getEnvAsInt("CRON_INTERVAL", 300)) * time.Second, // Default 5 minutes
 	}
 }
 

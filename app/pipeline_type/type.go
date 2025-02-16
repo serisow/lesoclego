@@ -36,6 +36,7 @@ type PipelineStep struct {
 	ActionConfig           string                  `json:"action_config,omitempty"`
 	ActionDetails          *ActionDetails          `json:"action_details,omitempty"`
 	GoogleSearchConfig     *GoogleSearchConfig     `json:"google_search_config,omitempty"`
+	NewsAPIConfig          *NewsAPIConfig          `json:"news_api_config,omitempty"`
 	SearchInput            string                  `json:"search_input,omitempty"`
 }
 
@@ -64,14 +65,25 @@ type GoogleSearchParams struct {
 	SafeSearch   string `json:"safe_search"`
 }
 
-type DocumentSearchSettings struct {
-	SimilarityThreshold string `json:"similarity_threshold"`
-	MaxResults          string `json:"max_results"`
-	SimilarityMetric    string `json:"similarity_metric"`
-}
-
 type ContentSearchSettings struct {
 	IncludeMetadata    int    `json:"include_metadata"`
 	MinWordCount       string `json:"min_word_count"`
 	ExcludeAlreadyUsed int    `json:"exclude_already_used"`
+}
+
+type NewsAPIDateRange struct {
+    From string `json:"from"`
+    To   string `json:"to"`
+}
+
+type NewsAPIAdvancedParams struct {
+    Language  string          `json:"language"`
+    SortBy    string         `json:"sort_by"`
+    PageSize  string         `json:"page_size"`
+    DateRange NewsAPIDateRange `json:"date_range"`
+}
+
+type NewsAPIConfig struct {
+    Query          string               `json:"query"`
+    AdvancedParams NewsAPIAdvancedParams `json:"advanced_params"`
 }
