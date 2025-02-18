@@ -1,18 +1,20 @@
 package search_step
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "io"
-    "net/http"
-    "net/url"
-    "strings"
-    "time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+	"unicode/utf8"
 
-    "github.com/PuerkitoBio/goquery"
-    "github.com/serisow/lesocle/config"
-    "github.com/serisow/lesocle/pipeline_type"
+	"github.com/PuerkitoBio/goquery"
+	"github.com/serisow/lesocle/config"
+	"github.com/serisow/lesocle/pipeline_type"
 )
 
 type NewsAPISearchStepImpl struct {
@@ -138,7 +140,11 @@ func (s *NewsAPISearchStepImpl) Execute(ctx context.Context, pipelineContext *pi
     }
 
     for _, article := range result.Articles {
-        expandedContent := s.fetchExpandedContent(article.URL)
+        expandedContent, err := s.fetchExpandedContent(article.URL)
+		if err != nil {
+			// @TODO log the error or take better approach
+			continue
+		}
 
         articleData := map[string]interface{}{
             "title":            article.Title,
@@ -163,79 +169,113 @@ func (s *NewsAPISearchStepImpl) Execute(ctx context.Context, pipelineContext *pi
     return nil
 }
 
-func (s *NewsAPISearchStepImpl) fetchExpandedContent(url string) string {
-    if strings.Contains(url, "consent.yahoo.com") {
-        return "Content unavailable - requires consent"
-    }
+func (s *NewsAPISearchStepImpl) fetchExpandedContent(url string) (string, error) {
+	if strings.Contains(url, "consent.yahoo.com") {
+		return "Content unavailable - requires consent", nil
+	}
 
-    req, err := http.NewRequest("GET", url, nil)
-    if err != nil {
-        return fmt.Sprintf("Error creating request: %s", err.Error())
-    }
+	// Configure HTTP client
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 
-    req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Pipeline/1.0; +http://example.com)")
-    
-    client := &http.Client{
-        Timeout: 10 * time.Second,
-    }
-    
-    resp, err := client.Do(req)
-    if err != nil {
-        return fmt.Sprintf("Error fetching content: %s", err.Error())
-    }
-    defer resp.Body.Close()
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Drupal/10.0; +http://example.com)")
 
-    if resp.StatusCode != http.StatusOK {
-        return fmt.Sprintf("Error fetching content: HTTP status %d", resp.StatusCode)
-    }
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
 
-    doc, err := goquery.NewDocumentFromReader(resp.Body)
-    if err != nil {
-        return fmt.Sprintf("Error parsing HTML: %s", err.Error())
-    }
+	// Parse HTML document
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return "", err
+	}
 
-    var content string
-    contentSelectors := []string{
-        "article[class*='article-content']",
-        "div[class*='article-body']",
-        "div[class*='story-content']",
-        "div[class*='post-content']",
-        "main article",
-        "div[role='main']",
-        "article",
-        ".content",
-        "#content",
-        "main",
-        ".post",
-        "#main",
-        ".entry-content",
-        ".blog-post",
-        "#primary",
-        "#main-content",
-    }
+	// First pass: Remove unwanted tags
+	tagsToRemove := []string{
+		"script", "style", "iframe", "noscript", "nav",
+		"footer", "header", "form", "button", "input",
+		"select", "textarea", "svg", "img", "meta",
+		"link", "object", "embed", "applet", "frame",
+		"frameset", "map", "area", "audio", "video",
+		"source", "track", "canvas", "datalist", "keygen",
+		"output", "progress", "time",
+	}
+	for _, tag := range tagsToRemove {
+		doc.Find(tag).Each(func(i int, s *goquery.Selection) {
+			s.Remove()
+		})
+	}
 
-    for _, selector := range contentSelectors {
-        doc.Find(selector).Each(func(i int, s *goquery.Selection) {
-            content += s.Text() + "\n"
-        })
-        if len(content) > 100 {
-            break
-        }
-    }
+	// Second pass: Remove elements by class/id patterns
+	unwantedSelectors := []string{
+		"*[class*='ad']",
+		"*[class*='banner']",
+		"*[class*='sidebar']",
+		"*[class*='popup']",
+		"*[class*='cookie']",
+		"*[class*='modal']",
+		"*[class*='newsletter']",
+		"*[id*='ad']",
+		"*[id*='banner']",
+		"*[id*='sidebar']",
+		"*[id*='popup']",
+		"*[id*='cookie']",
+		"*[id*='modal']",
+		"*[id*='newsletter']",
+		"*[role='navigation']",
+		"*[role='banner']",
+		"*[role='complementary']",
+		"*[role='search']",
+	}
+	for _, selector := range unwantedSelectors {
+		doc.Find(selector).Each(func(i int, s *goquery.Selection) {
+			s.Remove()
+		})
+	}
 
-    if content == "" {
-        content = doc.Find("body").Text()
-    }
+	// Third pass: Content heuristics
+	const (
+		minTextLength  = 120
+		maxLinkDensity = 0.25
+	)
 
-    content = cleanSearchContent(content)
-    if len(content) > 2000 {
-        content = content[:2000] + "..."
-    }
+	doc.Find("*").Each(func(i int, s *goquery.Selection) {
+		text := strings.Join(strings.Fields(s.Text()), " ")
+		textLength := utf8.RuneCountInString(text)
+		linkCount := s.Find("a").Length()
+		linkDensity := 0.0
+		if textLength > 0 {
+			linkDensity = float64(linkCount) / float64(textLength)
+		}
 
-    return content
+		if textLength < minTextLength || linkDensity > maxLinkDensity || text == "" {
+			s.Remove()
+		}
+	})
+
+	// Final cleanup
+	text := doc.Find("body").Text()
+	
+	// Cleanup regex patterns
+	cleanupPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`\s+`),
+		regexp.MustCompile(`\[\d+\]`),
+		regexp.MustCompile(`https?:\/\/\S+`),
+	}
+
+	for _, pattern := range cleanupPatterns {
+		text = pattern.ReplaceAllString(text, " ")
+	}
+
+	return strings.TrimSpace(text), nil
 }
-
-
 
 func (s *NewsAPISearchStepImpl) GetType() string {
     return "news_api_search"
