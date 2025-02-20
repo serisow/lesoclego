@@ -112,6 +112,10 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("search_tweets", action_service.NewSearchTweetsActionService(logger))
 	registry.RegisterActionService("tweet_data_enricher", action_service.NewTweetDataEnricherService(logger))
 
+	// Linkedin action service
+	registry.RegisterActionService("linkedin_share", action_service.NewLinkedInShareActionService(logger))
+
+
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
 	
