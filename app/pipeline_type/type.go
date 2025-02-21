@@ -38,6 +38,7 @@ type PipelineStep struct {
 	GoogleSearchConfig     *GoogleSearchConfig     `json:"google_search_config,omitempty"`
 	NewsAPIConfig          *NewsAPIConfig          `json:"news_api_config,omitempty"`
 	SearchInput            string                  `json:"search_input,omitempty"`
+	ArticleData             map[string]interface{} `json:"article_data,omitempty"` // Drupal node data for social media step
 }
 
 type ActionDetails struct {

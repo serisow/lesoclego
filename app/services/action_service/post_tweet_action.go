@@ -53,6 +53,24 @@ func (s *PostTweetActionService) Execute(ctx context.Context, actionConfig strin
         if !ok {
             return "", fmt.Errorf("required step output '%s' not found for tweet content", requiredStep)
         }
+
+
+        // Try to detect if this is from a social media step
+        var resultData map[string]interface{}
+        if err := json.Unmarshal([]byte(fmt.Sprintf("%v", stepOutput)), &resultData); err == nil {
+            if platforms, ok := resultData["platforms"].(map[string]interface{}); ok {
+                if twitterContent, ok := platforms["twitter"].(map[string]interface{}); ok {
+                    // This is from a social media step, use the twitter content
+                    twitterJSON, err := json.Marshal(twitterContent)
+                    if err != nil {
+                        return "", fmt.Errorf("error marshaling twitter content: %w", err)
+                    }
+                    content = string(twitterJSON)
+                    break
+                }
+            }
+        }
+
         content += fmt.Sprintf("%v", stepOutput)
     }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/serisow/lesocle/scheduler"
 	"github.com/serisow/lesocle/search_step"
 	"github.com/serisow/lesocle/server"
+	"github.com/serisow/lesocle/social_media_step"
 
 	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/llm_service"
@@ -97,6 +98,10 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 
 	registry.RegisterStepType("news_api_search", func() step.Step {
         return &search_step.NewsAPISearchStepImpl{}
+    })
+
+	registry.RegisterStepType("social_media_step", func() step.Step {
+        return &social_media_step.SocialMediaStepImpl{}
     })
 
 	// Register the LLM Services
