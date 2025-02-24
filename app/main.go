@@ -109,6 +109,8 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterLLMService("openai_image", llm_service.NewOpenAIImageService(logger))
 	registry.RegisterLLMService("anthropic", llm_service.NewAnthropicService(logger))
 	registry.RegisterLLMService("gemini", llm_service.NewGeminiService(logger))
+	registry.RegisterLLMService("elevenlabs", llm_service.NewElevenLabsService(logger))
+
 
 	// Register Action services
 	
@@ -119,7 +121,8 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 
 	// Linkedin action service
 	registry.RegisterActionService("linkedin_share", action_service.NewLinkedInShareActionService(logger))
-
+	// Facebook action service
+	registry.RegisterActionService("facebook_share", action_service.NewFacebookShareActionService(logger))
 
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))

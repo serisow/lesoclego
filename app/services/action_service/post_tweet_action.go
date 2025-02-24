@@ -169,7 +169,7 @@ func (s *PostTweetActionService) Execute(ctx context.Context, actionConfig strin
         slog.String("error", errorMessage),
         slog.Int("status_code", resp.StatusCode))
 
-    return "", fmt.Errorf("Twitter API Error: %s", errorMessage)
+    return "", fmt.Errorf("twitter API Error: %s", errorMessage)
 }
 
 func (s *PostTweetActionService) CanHandle(actionService string) bool {
