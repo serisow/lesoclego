@@ -26,6 +26,9 @@ func ExecutePipeline(executionID string, p *pipeline_type.Pipeline, registry *pl
     if p.Context == nil {
         p.Context = pipeline_type.NewContext()
     }
+    
+    // Add all pipeline steps to the context so we can look them up by output type
+    p.Context.SetSteps(p.Steps)
 
     ExecutionStore.Lock()
     execResult := &ExecutionResult{

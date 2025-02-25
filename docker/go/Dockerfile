@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
     tidy \
     tesseract-ocr \
     tesseract-ocr-eng \
+    ffmpeg \
     vim \
     ca-certificates \
  && rm -rf /var/lib/apt/lists/*
+
+ # Verify FFmpeg installation
+RUN which ffmpeg && ffmpeg -version

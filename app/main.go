@@ -110,22 +110,21 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterLLMService("anthropic", llm_service.NewAnthropicService(logger))
 	registry.RegisterLLMService("gemini", llm_service.NewGeminiService(logger))
 	registry.RegisterLLMService("elevenlabs", llm_service.NewElevenLabsService(logger))
-
+	// This one is not a true LLM but an API, but TTS is expensive for dev environment
+	// so i use for the moment for that.
+    registry.RegisterLLMService("aws_polly", llm_service.NewAWSPollyService(logger))
 
 	// Register Action services
-	
-	// Tweeter action service
+
 	registry.RegisterActionService("post_tweet", action_service.NewPostTweetActionService(logger))
 	registry.RegisterActionService("search_tweets", action_service.NewSearchTweetsActionService(logger))
 	registry.RegisterActionService("tweet_data_enricher", action_service.NewTweetDataEnricherService(logger))
-
-	// Linkedin action service
 	registry.RegisterActionService("linkedin_share", action_service.NewLinkedInShareActionService(logger))
-	// Facebook action service
 	registry.RegisterActionService("facebook_share", action_service.NewFacebookShareActionService(logger))
-
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
+    registry.RegisterActionService("video_generation", action_service.NewVideoGenerationActionService(logger))
+
 	
 }
 
