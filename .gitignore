@@ -2,9 +2,9 @@
 .env
 launch.json
 output
-lesocle
 logs
 ./db _data/
 backups/
 TODO.md
 app/storage/
+app/lesoclego

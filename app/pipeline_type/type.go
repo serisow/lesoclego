@@ -21,24 +21,28 @@ type Pipeline struct {
 }
 
 type PipelineStep struct {
-	ID                     string                  `json:"id"`
-	Type                   string                  `json:"type"`
-	Weight                 int                     `json:"weight"`
-	StepDescription        string                  `json:"step_description"`
-	StepOutputKey          string                  `json:"step_output_key"`
-	OutputType             string                  `json:"output_type"`
-	RequiredSteps          string                  `json:"required_steps"`
-	LLMConfig              string                  `json:"llm_config,omitempty"`
-	Prompt                 string                  `json:"prompt,omitempty"`
-	Response               string                  `json:"response,omitempty"`
-	UUID                   string                  `json:"uuid"`
-	LLMServiceConfig       map[string]interface{}  `json:"llm_service,omitempty"`
-	ActionConfig           string                  `json:"action_config,omitempty"`
-	ActionDetails          *ActionDetails          `json:"action_details,omitempty"`
-	GoogleSearchConfig     *GoogleSearchConfig     `json:"google_search_config,omitempty"`
-	NewsAPIConfig          *NewsAPIConfig          `json:"news_api_config,omitempty"`
-	SearchInput            string                  `json:"search_input,omitempty"`
-	ArticleData             map[string]interface{} `json:"article_data,omitempty"` // Drupal node data for social media step
+	ID                 string                 `json:"id"`
+	Type               string                 `json:"type"`
+	Weight             int                    `json:"weight"`
+	StepDescription    string                 `json:"step_description"`
+	StepOutputKey      string                 `json:"step_output_key"`
+	OutputType         string                 `json:"output_type"`
+	RequiredSteps      string                 `json:"required_steps"`
+	LLMConfig          string                 `json:"llm_config,omitempty"`
+	Prompt             string                 `json:"prompt,omitempty"`
+	Response           string                 `json:"response,omitempty"`
+	UUID               string                 `json:"uuid"`
+	LLMServiceConfig   map[string]interface{} `json:"llm_service,omitempty"`
+	ActionConfig       string                 `json:"action_config,omitempty"`
+	ActionDetails      *ActionDetails         `json:"action_details,omitempty"`
+	GoogleSearchConfig *GoogleSearchConfig    `json:"google_search_config,omitempty"`
+	NewsAPIConfig      *NewsAPIConfig         `json:"news_api_config,omitempty"`
+	SearchInput        string                 `json:"search_input,omitempty"`
+	// Drupal node data for social media step
+	ArticleData        map[string]interface{} `json:"article_data,omitempty"`
+	UploadImageConfig  *UploadImageConfig     `json:"upload_image_config,omitempty"`
+	UploadAudioConfig  *UploadAudioConfig     `json:"upload_audio_config,omitempty"`
+
 }
 
 type ActionDetails struct {
@@ -73,18 +77,39 @@ type ContentSearchSettings struct {
 }
 
 type NewsAPIDateRange struct {
-    From string `json:"from"`
-    To   string `json:"to"`
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 type NewsAPIAdvancedParams struct {
-    Language  string          `json:"language"`
-    SortBy    string         `json:"sort_by"`
-    PageSize  string         `json:"page_size"`
-    DateRange NewsAPIDateRange `json:"date_range"`
+	Language  string           `json:"language"`
+	SortBy    string           `json:"sort_by"`
+	PageSize  string           `json:"page_size"`
+	DateRange NewsAPIDateRange `json:"date_range"`
 }
 
 type NewsAPIConfig struct {
-    Query          string               `json:"query"`
-    AdvancedParams NewsAPIAdvancedParams `json:"advanced_params"`
+	Query          string                `json:"query"`
+	AdvancedParams NewsAPIAdvancedParams `json:"advanced_params"`
+}
+
+// UploadImageConfig holds configuration for upload image steps
+type UploadImageConfig struct {
+	FileID   int `json:"image_file_id"`
+	FileURL  string `json:"image_file_url"`
+	FileURI  string `json:"image_file_uri"`
+	FileMime string `json:"image_file_mime"`
+	FileName string `json:"image_file_name"`
+	FileSize int64  `json:"image_file_size"`
+}
+
+// UploadAudioConfig holds configuration for upload audio steps
+type UploadAudioConfig struct {
+    FileID     int     `json:"audio_file_id"`
+    FileURL    string  `json:"audio_file_url"`
+    FileURI    string  `json:"audio_file_uri"`
+    FileMime   string  `json:"audio_file_mime"`
+    FileName   string  `json:"audio_file_name"`
+    FileDuration float64 `json:"audio_file_duration"`
+    FileSize   int64   `json:"audio_file_size"`
 }

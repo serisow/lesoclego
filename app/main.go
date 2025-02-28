@@ -19,6 +19,7 @@ import (
 	"github.com/serisow/lesocle/search_step"
 	"github.com/serisow/lesocle/server"
 	"github.com/serisow/lesocle/social_media_step"
+	"github.com/serisow/lesocle/upload_step"
 
 	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/llm_service"
@@ -103,6 +104,19 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterStepType("social_media_step", func() step.Step {
         return &social_media_step.SocialMediaStepImpl{}
     })
+
+	registry.RegisterStepType("upload_image_step", func() step.Step {
+		return &upload_step.UploadImageStepImpl{
+			Logger: logger,
+		}
+	})
+
+	// Add the new audio step registration
+	registry.RegisterStepType("upload_audio_step", func() step.Step {
+		return &upload_step.UploadAudioStepImpl{
+			Logger: logger,
+		}
+	})
 
 	// Register the LLM Services
 	registry.RegisterLLMService("openai", llm_service.NewOpenAIService(logger))
