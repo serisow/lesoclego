@@ -95,7 +95,7 @@ type NewsAPIConfig struct {
 
 // UploadImageConfig holds configuration for upload image steps
 type UploadImageConfig struct {
-	FileID   int `json:"image_file_id"`
+	FileID   int64 `json:"image_file_id"`
 	FileURL  string `json:"image_file_url"`
 	FileURI  string `json:"image_file_uri"`
 	FileMime string `json:"image_file_mime"`
@@ -105,7 +105,7 @@ type UploadImageConfig struct {
 
 // UploadAudioConfig holds configuration for upload audio steps
 type UploadAudioConfig struct {
-    FileID     int     `json:"audio_file_id"`
+    FileID     int64     `json:"audio_file_id"`
     FileURL    string  `json:"audio_file_url"`
     FileURI    string  `json:"audio_file_uri"`
     FileMime   string  `json:"audio_file_mime"`

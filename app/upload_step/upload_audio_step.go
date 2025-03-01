@@ -21,7 +21,7 @@ type UploadAudioStepImpl struct {
 
 // AudioFileInfo structure for output that matches Drupal's format
 type AudioFileInfo struct {
-    FileID     int     `json:"file_id"`
+    FileID     int64     `json:"file_id"`
     URI        string  `json:"uri"`
     URL        string  `json:"url"`
     MimeType   string  `json:"mime_type"`

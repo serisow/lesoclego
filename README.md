@@ -4,7 +4,7 @@ docker compose down && cd app/ && GOOS=linux go build -o lesoclego && cd .. && d
 
 EXAMPLE call one-time execution:
 
-curl -X POST http://localhost:8086/pipeline/test_first_on_demand/execute \
+curl -X POST http://lesoclego-dev.sa/pipeline/test_first_on_demand/execute \
      -H "Content-Type: application/json" \
      -d '{"user_input": "Analyze the impact of artificial intelligence on job markets"}'
 
