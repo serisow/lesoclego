@@ -145,10 +145,16 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 }
 
 // findFileByOutputType looks for files matching a specific output type in the pipeline context
+// It uses three approaches:
+// 1. Find all steps with matching output_type and check their outputs
+// 2. Look for common key names like image_data and audio_data
+// 3. Scan all step outputs as a last resort
+// This ensures maximum compatibility with different pipeline configurations
 func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pipeline_type.Context, outputType string) (*FileInfo, error) {
 	s.logger.Info("Looking for file with output type", slog.String("output_type", outputType))
 	
-	// First approach: Get all steps with the matching output type and check their outputs
+	// First approach: Look for steps that have the specific output_type
+	// This is the most reliable method when pipelines are properly configured
 	steps := pipelineContext.GetStepsByOutputType(outputType)
 	s.logger.Debug("Found steps with matching output type", 
 		slog.Int("count", len(steps)),
@@ -172,7 +178,8 @@ func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pip
 		}
 	}
 	
-	// Second approach: Special case for common keys
+	// Second approach: Try common step output keys that frequently contain file information
+	// This helps with backward compatibility and common naming conventions
 	if outputType == "featured_image" && pipelineContext.StepOutputs["image_data"] != nil {
 		fileInfo, err := s.parseFileInfo(pipelineContext.StepOutputs["image_data"], outputType)
 		if err == nil {
@@ -187,7 +194,8 @@ func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pip
 		}
 	}
 	
-	// Final approach: Scan all outputs and check if they match the expected type
+	// Final approach: Scan all outputs as a last resort
+	// This helps catch file info stored in unexpected step outputs
 	for key, value := range pipelineContext.StepOutputs {
 		s.logger.Debug("Trying step output", slog.String("key", key))
 		
@@ -203,7 +211,11 @@ func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pip
 	return nil, fmt.Errorf("no file info found with output type: %s", outputType)
 }
 
-// parseFileInfo attempts to extract file information from different formats of step outputs
+// Handle structured file information in JSON format
+// Since different services may use slightly different JSON structures,
+// we try multiple approaches to parse the file info:
+// 1. Parse with a struct that matches common audio file format (string file_id)
+// 2. Fall back to the standard FileInfo struct if first attempt fails
 func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputType string) (*FileInfo, error) {
 	// Case 1: Direct URL (e.g., OpenAI image output)
 	if url, ok := output.(string); ok {
@@ -233,7 +245,8 @@ func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputT
 		
 		// Check if it's a JSON string
 		if isJSON(url) {
-			// First try with a custom struct that matches the actual format from the service
+			// First try with a custom struct that matches the actual format from services
+			// Many audio services return file_id as a string rather than a number
 			var audioResponse struct {
 				FileID    string `json:"file_id"`
 				URI       string `json:"uri"`
@@ -412,6 +425,10 @@ func (s *VideoGenerationActionService) downloadFile(fileURL string, fileType str
 	return outputPath, nil
 }
 
+// Handle different URI formats from various sources:
+// - Absolute paths starting with /
+// - Relative paths from the application root (storage/...)
+// - URIs with schemes (file://, http://, etc.)
 func (s *VideoGenerationActionService) uriToFilePath(uri string) string {
 	// Handle different URI formats
 	if strings.HasPrefix(uri, "/") {
