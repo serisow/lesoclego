@@ -27,13 +27,15 @@ type VideoGenerationActionService struct {
 
 // FileInfo represents standardized file information
 type FileInfo struct {
-	FileID    int64  `json:"file_id"`
-	URI       string `json:"uri"`
-	URL       string `json:"url"`
-	MimeType  string `json:"mime_type"`
-	Filename  string `json:"filename"`
-	Size      int64  `json:"size"`
-	Timestamp int64  `json:"timestamp"`
+	FileID    int64                  `json:"file_id"`
+	URI       string                 `json:"uri"`
+	URL       string                 `json:"url"`
+	MimeType  string                 `json:"mime_type"`
+	Filename  string                 `json:"filename"`
+	Size      int64                  `json:"size"`
+	Timestamp int64                  `json:"timestamp"`
+	Duration  float64                `json:"duration,omitempty"`
+	StepKey   string                 `json:"step_key,omitempty"`
 }
 
 func NewVideoGenerationActionService(logger *slog.Logger) *VideoGenerationActionService {
@@ -51,30 +53,34 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 		slog.String("step_id", step.ID),
 		slog.String("step_uuid", step.UUID))
 		
-	// Find image and audio files from the pipeline context based on output types
-	imageFileInfo, err := s.findFileByOutputType(pipelineContext, "featured_image")
+	// Find all images with output type "featured_image"
+	imageFiles, err := s.findFilesByOutputType(pipelineContext, "featured_image")
 	if err != nil {
-		return "", fmt.Errorf("image file information not found: %w", err)
+		return "", fmt.Errorf("image files not found: %w", err)
 	}
 
+	// Find audio file with output type "audio_content"
 	audioFileInfo, err := s.findFileByOutputType(pipelineContext, "audio_content")
 	if err != nil {
 		return "", fmt.Errorf("audio file information not found: %w", err)
 	}
 
 	s.logger.Debug("Found required files",
-		slog.String("image_uri", imageFileInfo.URI),
+		slog.Int("image_count", len(imageFiles)),
 		slog.String("audio_uri", audioFileInfo.URI))
 
 	// Get file paths from URIs
-	imageFilePath := s.uriToFilePath(imageFileInfo.URI)
-	audioFilePath := s.uriToFilePath(audioFileInfo.URI)
-
-	// Verify files exist
-	if _, err := os.Stat(imageFilePath); os.IsNotExist(err) {
-		return "", fmt.Errorf("image file not found at path: %s", imageFilePath)
+	imagePaths := make([]string, len(imageFiles))
+	for i, imageFile := range imageFiles {
+		imagePaths[i] = s.uriToFilePath(imageFile.URI)
+		
+		// Verify file exists
+		if _, err := os.Stat(imagePaths[i]); os.IsNotExist(err) {
+			return "", fmt.Errorf("image file not found at path: %s", imagePaths[i])
+		}
 	}
-
+	
+	audioFilePath := s.uriToFilePath(audioFileInfo.URI)
 	if _, err := os.Stat(audioFilePath); os.IsNotExist(err) {
 		return "", fmt.Errorf("audio file not found at path: %s", audioFilePath)
 	}
@@ -103,13 +109,16 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 	resolution := s.getResolution(videoQuality)
 
 	// Get audio duration
-	duration, err := s.getAudioDuration(audioFilePath)
+	audioDuration, err := s.getAudioDuration(audioFilePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get audio duration: %w", err)
 	}
 
+	// Calculate durations for each image
+	imageDurations := s.calculateImageDurations(imageFiles, audioDuration)
+
 	// Create video using FFmpeg
-	err = s.createVideo(imageFilePath, audioFilePath, outputPath, duration, resolution, config)
+	err = s.createMultiImageVideo(imagePaths, imageDurations, audioFilePath, outputPath, resolution, config)
 	if err != nil {
 		return "", fmt.Errorf("failed to create video: %w", err)
 	}
@@ -120,6 +129,16 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 		return "", fmt.Errorf("failed to get video file info: %w", err)
 	}
 
+	// Create response with slide information
+	slides := make([]map[string]interface{}, len(imageFiles))
+	for i, imageFile := range imageFiles {
+		slides[i] = map[string]interface{}{
+			"file_id":  imageFile.FileID,
+			"duration": imageDurations[i],
+			"step_key": imageFile.StepKey,
+		}
+	}
+
 	// Create response
 	result := map[string]interface{}{
 		"file_id":   fmt.Sprintf("%d", time.Now().UnixNano()),
@@ -127,9 +146,10 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 		"url":       fmt.Sprintf("/storage/pipeline/videos/%s/%s", time.Now().Format("2006-01"), filename),
 		"mime_type": fmt.Sprintf("video/%s", outputFormat),
 		"filename":  filename,
-		"duration":  duration,
+		"duration":  audioDuration,
 		"size":      fileInfo.Size(),
 		"timestamp": time.Now().Unix(),
+		"slides":    slides,
 	}
 
 	resultJSON, err := json.Marshal(result)
@@ -139,37 +159,34 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 
 	s.logger.Info("Video generation completed successfully",
 		slog.String("output_path", outputPath),
-		slog.Float64("duration", duration))
+		slog.Float64("duration", audioDuration),
+		slog.Int("slide_count", len(imageFiles)))
 
 	return string(resultJSON), nil
 }
 
-// findFileByOutputType looks for files matching a specific output type in the pipeline context
-// It uses three approaches:
-// 1. Find all steps with matching output_type and check their outputs
-// 2. Look for common key names like image_data and audio_data
-// 3. Scan all step outputs as a last resort
-// This ensures maximum compatibility with different pipeline configurations
-func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pipeline_type.Context, outputType string) (*FileInfo, error) {
-	s.logger.Info("Looking for file with output type", slog.String("output_type", outputType))
+// findFilesByOutputType returns all files matching a specific output type
+func (s *VideoGenerationActionService) findFilesByOutputType(pipelineContext *pipeline_type.Context, outputType string) ([]*FileInfo, error) {
+	s.logger.Info("Looking for files with output type", slog.String("output_type", outputType))
 	
-	// First approach: Look for steps that have the specific output_type
-	// This is the most reliable method when pipelines are properly configured
+	var files []*FileInfo
+	
+	// Find all steps with matching output_type
 	steps := pipelineContext.GetStepsByOutputType(outputType)
 	s.logger.Debug("Found steps with matching output type", 
 		slog.Int("count", len(steps)),
 		slog.Any("step_ids", getStepIDs(steps)))
 	
+	// First, try to find by exact output_type match
 	for _, step := range steps {
 		if stepOutput, exists := pipelineContext.GetStepOutput(step.StepOutputKey); exists {
-			// Try to handle different formats of output
 			fileInfo, err := s.parseFileInfo(stepOutput, outputType)
 			if err == nil {
+				fileInfo.StepKey = step.StepOutputKey
+				files = append(files, fileInfo)
 				s.logger.Info("Found file info from step with matching output_type",
 					slog.String("step_id", step.ID),
-					slog.String("output_key", step.StepOutputKey),
-					slog.String("uri", fileInfo.URI))
-				return fileInfo, nil
+					slog.String("output_key", step.StepOutputKey))
 			} else {
 				s.logger.Debug("Could not parse file info from step", 
 					slog.String("step_id", step.ID), 
@@ -178,15 +195,80 @@ func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pip
 		}
 	}
 	
-	// Second approach: Try common step output keys that frequently contain file information
-	// This helps with backward compatibility and common naming conventions
-	if outputType == "featured_image" && pipelineContext.StepOutputs["image_data"] != nil {
-		fileInfo, err := s.parseFileInfo(pipelineContext.StepOutputs["image_data"], outputType)
-		if err == nil {
-			return fileInfo, nil
+	// If no files found through direct output_type match, try known keys
+	if len(files) == 0 && outputType == "featured_image" {
+		// Look for keys containing "image_data"
+		for key, value := range pipelineContext.StepOutputs {
+			if strings.Contains(key, "image_data") {
+				fileInfo, err := s.parseFileInfo(value, outputType)
+				if err == nil {
+					fileInfo.StepKey = key
+					files = append(files, fileInfo)
+					s.logger.Info("Found file info from key scan",
+						slog.String("key", key),
+						slog.String("uri", fileInfo.URI))
+				}
+			}
 		}
 	}
 	
+	// Sort files by their step weights if available
+	if len(files) > 1 {
+		s.sortFilesByStepWeight(files, pipelineContext)
+	}
+	
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no files found with output type: %s", outputType)
+	}
+	
+	return files, nil
+}
+
+// sortFilesByStepWeight sorts the files based on their step weights
+func (s *VideoGenerationActionService) sortFilesByStepWeight(files []*FileInfo, pipelineContext *pipeline_type.Context) {
+	// Create a map of step output key to weight
+	weightMap := make(map[string]int)
+	for _, step := range pipelineContext.Steps {
+		weightMap[step.StepOutputKey] = step.Weight
+	}
+	
+	// Sort files based on their step weights
+	for i := 0; i < len(files); i++ {
+		for j := i + 1; j < len(files); j++ {
+			iWeight := weightMap[files[i].StepKey]
+			jWeight := weightMap[files[j].StepKey]
+			
+			if iWeight > jWeight {
+				files[i], files[j] = files[j], files[i]
+			}
+		}
+	}
+}
+
+// findFileByOutputType looks for a single file matching a specific output type
+func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pipeline_type.Context, outputType string) (*FileInfo, error) {
+	s.logger.Info("Looking for file with output type", slog.String("output_type", outputType))
+	
+	// First approach: Look for steps that have the specific output_type
+	steps := pipelineContext.GetStepsByOutputType(outputType)
+	s.logger.Debug("Found steps with matching output type", 
+		slog.Int("count", len(steps)),
+		slog.Any("step_ids", getStepIDs(steps)))
+	
+	for _, step := range steps {
+		if stepOutput, exists := pipelineContext.GetStepOutput(step.StepOutputKey); exists {
+			fileInfo, err := s.parseFileInfo(stepOutput, outputType)
+			if err == nil {
+				s.logger.Info("Found file info from step with matching output_type",
+					slog.String("step_id", step.ID),
+					slog.String("output_key", step.StepOutputKey),
+					slog.String("uri", fileInfo.URI))
+				return fileInfo, nil
+			}
+		}
+	}
+	
+	// Second approach: Try common step output keys
 	if outputType == "audio_content" && pipelineContext.StepOutputs["audio_data"] != nil {
 		fileInfo, err := s.parseFileInfo(pipelineContext.StepOutputs["audio_data"], outputType)
 		if err == nil {
@@ -195,27 +277,47 @@ func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pip
 	}
 	
 	// Final approach: Scan all outputs as a last resort
-	// This helps catch file info stored in unexpected step outputs
 	for key, value := range pipelineContext.StepOutputs {
-		s.logger.Debug("Trying step output", slog.String("key", key))
-		
-		fileInfo, err := s.parseFileInfo(value, outputType)
-		if err == nil {
-			s.logger.Info("Found file info from step output scanning",
-				slog.String("key", key),
-				slog.String("uri", fileInfo.URI))
-			return fileInfo, nil
+		if strings.Contains(key, "audio") {
+			fileInfo, err := s.parseFileInfo(value, outputType)
+			if err == nil {
+				s.logger.Info("Found file info from step output scanning",
+					slog.String("key", key),
+					slog.String("uri", fileInfo.URI))
+				return fileInfo, nil
+			}
 		}
 	}
 	
 	return nil, fmt.Errorf("no file info found with output type: %s", outputType)
 }
 
+// calculateImageDurations distributes the audio duration across images
+func (s *VideoGenerationActionService) calculateImageDurations(imageFiles []*FileInfo, audioDuration float64) []float64 {
+	imageCount := len(imageFiles)
+	if imageCount == 0 {
+		return []float64{}
+	}
+	
+	// Distribute equally by default
+	equalDuration := audioDuration / float64(imageCount)
+	imageDurations := make([]float64, imageCount)
+	for i := range imageDurations {
+		imageDurations[i] = equalDuration
+	}
+	
+	// Log the calculated durations
+	for i, duration := range imageDurations {
+		s.logger.Debug("Image duration set",
+			slog.Int("index", i),
+			slog.Float64("duration", duration),
+			slog.String("file", imageFiles[i].Filename))
+	}
+	
+	return imageDurations
+}
+
 // Handle structured file information in JSON format
-// Since different services may use slightly different JSON structures,
-// we try multiple approaches to parse the file info:
-// 1. Parse with a struct that matches common audio file format (string file_id)
-// 2. Fall back to the standard FileInfo struct if first attempt fails
 func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputType string) (*FileInfo, error) {
 	// Case 1: Direct URL (e.g., OpenAI image output)
 	if url, ok := output.(string); ok {
@@ -248,13 +350,14 @@ func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputT
 			// First try with a custom struct that matches the actual format from services
 			// Many audio services return file_id as a string rather than a number
 			var audioResponse struct {
-				FileID    string `json:"file_id"`
-				URI       string `json:"uri"`
-				URL       string `json:"url"`
-				MimeType  string `json:"mime_type"`
-				Filename  string `json:"filename"`
-				Size      int64  `json:"size"`
-				Timestamp int64  `json:"timestamp"`
+				FileID    string  `json:"file_id"`
+				URI       string  `json:"uri"`
+				URL       string  `json:"url"`
+				MimeType  string  `json:"mime_type"`
+				Filename  string  `json:"filename"`
+				Size      int64   `json:"size"`
+				Duration  float64 `json:"duration,omitempty"`
+				Timestamp int64   `json:"timestamp"`
 			}
 			
 			if err := json.Unmarshal([]byte(url), &audioResponse); err == nil && audioResponse.URI != "" {
@@ -271,6 +374,7 @@ func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputT
 					MimeType:  audioResponse.MimeType,
 					Filename:  audioResponse.Filename,
 					Size:      audioResponse.Size,
+					Duration:  audioResponse.Duration,
 					Timestamp: audioResponse.Timestamp,
 				}
 				
@@ -355,6 +459,11 @@ func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputT
 				}
 			}
 			
+			// Try to extract Duration if available
+			if duration, ok := mapData["duration"].(float64); ok {
+				fileInfo.Duration = duration
+			}
+			
 			// Validate the file info matches the expected output type
 			if outputType == "featured_image" && !isImageType(fileInfo.MimeType) && !strings.Contains(fileInfo.URI, "images") {
 				return nil, fmt.Errorf("file info doesn't match expected image type")
@@ -425,10 +534,7 @@ func (s *VideoGenerationActionService) downloadFile(fileURL string, fileType str
 	return outputPath, nil
 }
 
-// Handle different URI formats from various sources:
-// - Absolute paths starting with /
-// - Relative paths from the application root (storage/...)
-// - URIs with schemes (file://, http://, etc.)
+// uriToFilePath converts a URI to a file path
 func (s *VideoGenerationActionService) uriToFilePath(uri string) string {
 	// Handle different URI formats
 	if strings.HasPrefix(uri, "/") {
@@ -450,6 +556,7 @@ func (s *VideoGenerationActionService) uriToFilePath(uri string) string {
 	return uri
 }
 
+// getAudioDuration gets the duration of an audio file using ffprobe
 func (s *VideoGenerationActionService) getAudioDuration(filePath string) (float64, error) {
 	cmd := exec.Command("ffprobe", "-i", filePath, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0")
 	output, err := cmd.Output()
@@ -466,55 +573,87 @@ func (s *VideoGenerationActionService) getAudioDuration(filePath string) (float6
 	return duration, nil
 }
 
-func (s *VideoGenerationActionService) createVideo(imagePath, audioPath, outputPath string, duration float64, resolution string, config map[string]interface{}) error {
-	// Create FFmpeg command
-	args := []string{
-		"-loop", "1",
-		"-i", imagePath,
-		"-i", audioPath,
+// createMultiImageVideo creates a video from multiple images and an audio file
+func (s *VideoGenerationActionService) createMultiImageVideo(imagePaths []string, imageDurations []float64, audioPath string, outputPath string, resolution string, config map[string]interface{}) error {
+	if len(imagePaths) == 0 {
+		return fmt.Errorf("no image paths provided")
+	}
+	
+	// Prepare filter complex for concatenating images
+	filterComplex := ""
+	segments := []string{}
+	
+	// Process each image with its duration
+	for i, _ := range imagePaths {
+		// Get duration for this image
+		duration := imageDurations[i]
+		
+		// Add scaling and setsar for proper aspect ratio
+		filterComplex += fmt.Sprintf("[%d:v]loop=1:size=1,trim=duration=%.3f,setpts=PTS-STARTPTS,scale=%s:force_divisible_by=2,setsar=1[v%d];", 
+			i, duration, resolution, i)
+		segments = append(segments, fmt.Sprintf("[v%d]", i))
+	}
+	
+	// Concatenate all segments
+	filterComplex += strings.Join(segments, "") + fmt.Sprintf("concat=n=%d:v=1:a=0[outv]", len(imagePaths))
+	
+	// Build ffmpeg command
+	args := []string{}
+	
+	// Add inputs for each image
+	for _, imagePath := range imagePaths {
+		args = append(args, "-loop", "1", "-i", imagePath)
+	}
+	
+	// Add audio input
+	args = append(args, "-i", audioPath)
+	
+	// Add filter complex
+	args = append(args, "-filter_complex", filterComplex)
+	
+	// Add mapping
+	args = append(args, "-map", "[outv]", "-map", fmt.Sprintf("%d:a", len(imagePaths)))
+	
+	// Add encoding parameters
+	args = append(args, 
 		"-c:v", "libx264",
 		"-c:a", "aac",
-		"-t", fmt.Sprintf("%.6f", duration),
-		"-pix_fmt", "yuv420p",
-		"-shortest",
-	}
-
-	// Add resolution if specified
-	if resolution != "" {
-		args = append(args, "-s", resolution)
-	}
-
+		"-pix_fmt", "yuv420p")
+	
 	// Add bitrate if specified
 	if bitrate, ok := config["bitrate"].(string); ok && bitrate != "" {
 		args = append(args, "-b:v", bitrate)
 	}
-
+	
 	// Add framerate if specified
 	if framerate, ok := config["framerate"].(float64); ok && framerate > 0 {
 		args = append(args, "-r", fmt.Sprintf("%.0f", framerate))
 	}
-
+	
+	// Add shortest flag to make output duration match audio
+	args = append(args, "-shortest")
+	
 	// Add output file
 	args = append(args, "-y", outputPath)
-
+	
 	// Log the command
 	s.logger.Debug("Executing FFmpeg command", slog.Any("args", args))
-
+	
 	// Execute command
 	cmd := exec.Command("ffmpeg", args...)
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stderr pipe: %w", err)
 	}
-
+	
 	// Start the command
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start FFmpeg: %w", err)
 	}
-
+	
 	// Read stderr for debugging
 	stderrOutput, _ := io.ReadAll(stderr)
-
+	
 	// Wait for the command to finish
 	if err := cmd.Wait(); err != nil {
 		s.logger.Error("FFmpeg execution failed",
@@ -522,41 +661,48 @@ func (s *VideoGenerationActionService) createVideo(imagePath, audioPath, outputP
 			slog.String("stderr", string(stderrOutput)))
 		return fmt.Errorf("FFmpeg execution failed: %w", err)
 	}
-
+	
 	// Verify output file exists
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		return fmt.Errorf("FFmpeg did not create an output file")
 	}
-
+	
 	return nil
 }
 
+// getResolution returns the resolution based on the quality setting
 func (s *VideoGenerationActionService) getResolution(quality string) string {
 	switch quality {
 	case "low":
-		return "640x480"
+		return "640:480"
 	case "high":
-		return "1920x1080"
+		return "1920:1080"
 	case "medium":
 		fallthrough
 	default:
-		return "1280x720"
+		return "1280:720"
 	}
 }
 
-func (s *VideoGenerationActionService) CanHandle(actionService string) bool {
-	return actionService == VideoGenerationServiceName
+// Helper function to get step IDs for logging
+func getStepIDs(steps []pipeline_type.PipelineStep) []string {
+	ids := make([]string, len(steps))
+	for i, step := range steps {
+		ids[i] = step.ID
+	}
+	return ids
 }
 
-// Helper functions
+// Helper functions for file type detection
 
+// isJSON checks if a string is valid JSON
 func isJSON(str string) bool {
 	var js json.RawMessage
 	return json.Unmarshal([]byte(str), &js) == nil
 }
 
+// isImageURL checks if a URL appears to point to an image
 func isImageURL(url string) bool {
-	// Check if it's a URL that seems to point to an image
 	return strings.HasPrefix(url, "http") && 
 		(strings.Contains(url, ".jpg") || 
 		 strings.Contains(url, ".jpeg") || 
@@ -566,14 +712,17 @@ func isImageURL(url string) bool {
 		 strings.Contains(url, "image"))
 }
 
+// isImageType checks if a MIME type is an image
 func isImageType(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "image/")
 }
 
+// isAudioType checks if a MIME type is audio
 func isAudioType(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "audio/")
 }
 
+// detectMimeType guesses MIME type from a URL
 func detectMimeType(url string, defaultMime string) string {
 	if strings.Contains(url, ".jpg") || strings.Contains(url, ".jpeg") {
 		return "image/jpeg"
@@ -596,10 +745,6 @@ func detectMimeType(url string, defaultMime string) string {
 	return defaultMime
 }
 
-func getStepIDs(steps []pipeline_type.PipelineStep) []string {
-	ids := make([]string, len(steps))
-	for i, step := range steps {
-		ids[i] = step.ID
-	}
-	return ids
+func (s *VideoGenerationActionService) CanHandle(actionService string) bool {
+	return actionService == VideoGenerationServiceName
 }
