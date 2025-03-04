@@ -183,6 +183,9 @@ func (s *VideoGenerationActionService) findFilesByOutputType(pipelineContext *pi
 			fileInfo, err := s.parseFileInfo(stepOutput, outputType)
 			if err == nil {
 				fileInfo.StepKey = step.StepOutputKey
+				if outputType == "featured_image" && step.UploadImageConfig != nil && step.UploadImageConfig.Duration > 0 {
+					fileInfo.Duration = step.UploadImageConfig.Duration
+				}
 				files = append(files, fileInfo)
 				s.logger.Info("Found file info from step with matching output_type",
 					slog.String("step_id", step.ID),
@@ -251,18 +254,13 @@ func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pip
 	
 	// First approach: Look for steps that have the specific output_type
 	steps := pipelineContext.GetStepsByOutputType(outputType)
-	s.logger.Debug("Found steps with matching output type", 
-		slog.Int("count", len(steps)),
-		slog.Any("step_ids", getStepIDs(steps)))
-	
 	for _, step := range steps {
 		if stepOutput, exists := pipelineContext.GetStepOutput(step.StepOutputKey); exists {
 			fileInfo, err := s.parseFileInfo(stepOutput, outputType)
 			if err == nil {
-				s.logger.Info("Found file info from step with matching output_type",
-					slog.String("step_id", step.ID),
-					slog.String("output_key", step.StepOutputKey),
-					slog.String("uri", fileInfo.URI))
+				if outputType == "featured_image" && step.UploadImageConfig != nil && step.UploadImageConfig.Duration > 0 {
+					fileInfo.Duration = step.UploadImageConfig.Duration
+				}
 				return fileInfo, nil
 			}
 		}
@@ -292,29 +290,50 @@ func (s *VideoGenerationActionService) findFileByOutputType(pipelineContext *pip
 	return nil, fmt.Errorf("no file info found with output type: %s", outputType)
 }
 
-// calculateImageDurations distributes the audio duration across images
+// calculateImageDurations uses the duration field from each image configuration
 func (s *VideoGenerationActionService) calculateImageDurations(imageFiles []*FileInfo, audioDuration float64) []float64 {
-	imageCount := len(imageFiles)
-	if imageCount == 0 {
-		return []float64{}
-	}
-	
-	// Distribute equally by default
-	equalDuration := audioDuration / float64(imageCount)
-	imageDurations := make([]float64, imageCount)
-	for i := range imageDurations {
-		imageDurations[i] = equalDuration
-	}
-	
-	// Log the calculated durations
-	for i, duration := range imageDurations {
-		s.logger.Debug("Image duration set",
-			slog.Int("index", i),
-			slog.Float64("duration", duration),
-			slog.String("file", imageFiles[i].Filename))
-	}
-	
-	return imageDurations
+    imageCount := len(imageFiles)
+    if imageCount == 0 {
+        return []float64{}
+    }
+    
+    // Use duration from each image file if available
+    imageDurations := make([]float64, imageCount)
+    totalDuration := 0.0
+    
+    for i, file := range imageFiles {
+        // Use the duration from the FileInfo if it's set (should be populated from the UploadImageConfig)
+        if file.Duration > 0 {
+            imageDurations[i] = file.Duration
+            totalDuration += file.Duration
+        } else {
+            // Fallback to equal distribution if duration not set
+            imageDurations[i] = audioDuration / float64(imageCount)
+        }
+    }
+    
+    // If total duration exceeds audio duration, scale down proportionally
+    if totalDuration > audioDuration {
+        scaleFactor := audioDuration / totalDuration
+        for i := range imageDurations {
+            imageDurations[i] *= scaleFactor
+        }
+        
+        s.logger.Warn("Total image durations exceeded audio duration, scaling down",
+            slog.Float64("original_total", totalDuration),
+            slog.Float64("scaled_total", audioDuration),
+            slog.Float64("scale_factor", scaleFactor))
+    }
+    
+    // Log the calculated durations
+    for i, duration := range imageDurations {
+        s.logger.Debug("Image duration set",
+            slog.Int("index", i),
+            slog.Float64("duration", duration),
+            slog.String("file", imageFiles[i].Filename))
+    }
+    
+    return imageDurations
 }
 
 // Handle structured file information in JSON format
