@@ -594,99 +594,154 @@ func (s *VideoGenerationActionService) getAudioDuration(filePath string) (float6
 
 // createMultiImageVideo creates a video from multiple images and an audio file
 func (s *VideoGenerationActionService) createMultiImageVideo(imagePaths []string, imageDurations []float64, audioPath string, outputPath string, resolution string, config map[string]interface{}) error {
-	if len(imagePaths) == 0 {
-		return fmt.Errorf("no image paths provided")
-	}
-	
-	// Prepare filter complex for concatenating images
-	filterComplex := ""
-	segments := []string{}
-	
-	// Process each image with its duration
-	for i, _ := range imagePaths {
-		// Get duration for this image
-		duration := imageDurations[i]
-		
-		// Add scaling and setsar for proper aspect ratio
-		filterComplex += fmt.Sprintf("[%d:v]loop=1:size=1,trim=duration=%.3f,setpts=PTS-STARTPTS,scale=%s:force_divisible_by=2,setsar=1[v%d];", 
-			i, duration, resolution, i)
-		segments = append(segments, fmt.Sprintf("[v%d]", i))
-	}
-	
-	// Concatenate all segments
-	filterComplex += strings.Join(segments, "") + fmt.Sprintf("concat=n=%d:v=1:a=0[outv]", len(imagePaths))
-	
-	// Build ffmpeg command
-	args := []string{}
-	
-	// Add inputs for each image
-	for _, imagePath := range imagePaths {
-		args = append(args, "-loop", "1", "-i", imagePath)
-	}
-	
-	// Add audio input
-	args = append(args, "-i", audioPath)
-	
-	// Add filter complex
-	args = append(args, "-filter_complex", filterComplex)
-	
-	// Add mapping
-	args = append(args, "-map", "[outv]", "-map", fmt.Sprintf("%d:a", len(imagePaths)))
-	
-	// Add encoding parameters
-	args = append(args, 
-		"-c:v", "libx264",
-		"-c:a", "aac",
-		"-pix_fmt", "yuv420p")
-	
-	// Add bitrate if specified
-	if bitrate, ok := config["bitrate"].(string); ok && bitrate != "" {
-		args = append(args, "-b:v", bitrate)
-	}
-	
-	// Add framerate if specified
-	if framerate, ok := config["framerate"].(float64); ok && framerate > 0 {
-		args = append(args, "-r", fmt.Sprintf("%.0f", framerate))
-	}
-	
-	// Add shortest flag to make output duration match audio
-	args = append(args, "-shortest")
-	
-	// Add output file
-	args = append(args, "-y", outputPath)
-	
-	// Log the command
-	s.logger.Debug("Executing FFmpeg command", slog.Any("args", args))
-	
-	// Execute command
-	cmd := exec.Command("ffmpeg", args...)
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stderr pipe: %w", err)
-	}
-	
-	// Start the command
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start FFmpeg: %w", err)
-	}
-	
-	// Read stderr for debugging
-	stderrOutput, _ := io.ReadAll(stderr)
-	
-	// Wait for the command to finish
-	if err := cmd.Wait(); err != nil {
-		s.logger.Error("FFmpeg execution failed",
-			slog.String("error", err.Error()),
-			slog.String("stderr", string(stderrOutput)))
-		return fmt.Errorf("FFmpeg execution failed: %w", err)
-	}
-	
-	// Verify output file exists
-	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
-		return fmt.Errorf("FFmpeg did not create an output file")
-	}
-	
-	return nil
+    if len(imagePaths) == 0 {
+        return fmt.Errorf("no image paths provided")
+    }
+    
+    // Get transition configuration
+    transitionType := getStringValue(config, "transition_type", "fade")
+    transitionDurationStr := getStringValue(config, "transition_duration", "1")
+    transitionDuration, err := strconv.ParseFloat(transitionDurationStr, 64)
+    if err != nil {
+        // Default to 1 second if parsing fails
+        transitionDuration = 1.0
+        s.logger.Warn("Failed to parse transition_duration, using default",
+            slog.String("value", transitionDurationStr),
+            slog.Float64("default", transitionDuration))
+    }
+    
+    // Build ffmpeg command
+    args := []string{}
+    
+    // Add inputs for each image
+    for _, imagePath := range imagePaths {
+        args = append(args, "-loop", "1", "-i", imagePath)
+    }
+    
+    // Add audio input
+    args = append(args, "-i", audioPath)
+    
+    // Create filter complex string for transitions
+    filterComplex := s.buildTransitionFilterComplex(len(imagePaths), imageDurations, transitionType, transitionDuration, resolution)
+    
+    // Add filter complex
+    args = append(args, "-filter_complex", filterComplex)
+    
+    // Map the last output and audio stream
+    outputLabel := fmt.Sprintf("v%d", len(imagePaths)-1)
+    if len(imagePaths) > 1 {
+        outputLabel = fmt.Sprintf("trans%d", len(imagePaths)-1)
+    }
+    
+    args = append(args, "-map", fmt.Sprintf("[%s]", outputLabel), "-map", fmt.Sprintf("%d:a", len(imagePaths)))
+    
+    // Add encoding parameters
+    args = append(args, 
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-pix_fmt", "yuv420p")
+    
+    // Add bitrate if specified
+    if bitrate, ok := config["bitrate"].(string); ok && bitrate != "" {
+        args = append(args, "-b:v", bitrate)
+    }
+    
+    // Add framerate if specified
+    frameRateStr, ok := config["framerate"].(string)
+    if ok && frameRateStr != "" {
+        frameRate, err := strconv.ParseFloat(frameRateStr, 64)
+        if err == nil && frameRate > 0 {
+            args = append(args, "-r", fmt.Sprintf("%.0f", frameRate))
+        }
+    } else if frameRate, ok := config["framerate"].(float64); ok && frameRate > 0 {
+        args = append(args, "-r", fmt.Sprintf("%.0f", frameRate))
+    }
+    
+    // Add shortest flag to make output duration match audio
+    args = append(args, "-shortest")
+    
+    // Add output file
+    args = append(args, "-y", outputPath)
+    
+    // Log the command for debugging
+    s.logger.Debug("Executing FFmpeg command", slog.Any("args", args))
+    
+    // Execute command
+    cmd := exec.Command("ffmpeg", args...)
+    stderr, err := cmd.StderrPipe()
+    if err != nil {
+        return fmt.Errorf("failed to get stderr pipe: %w", err)
+    }
+    
+    // Start the command
+    if err := cmd.Start(); err != nil {
+        return fmt.Errorf("failed to start FFmpeg: %w", err)
+    }
+    
+    // Read stderr for debugging
+    stderrOutput, _ := io.ReadAll(stderr)
+    
+    // Wait for the command to finish
+    if err := cmd.Wait(); err != nil {
+        s.logger.Error("FFmpeg execution failed",
+            slog.String("error", err.Error()),
+            slog.String("stderr", string(stderrOutput)))
+        return fmt.Errorf("FFmpeg execution failed: %w", err)
+    }
+    
+    // Verify output file exists
+    if _, err := os.Stat(outputPath); os.IsNotExist(err) {
+        return fmt.Errorf("FFmpeg did not create an output file")
+    }
+    
+    return nil
+}
+
+// buildTransitionFilterComplex creates the FFmpeg filter complex string for transitions
+func (s *VideoGenerationActionService) buildTransitionFilterComplex(imageCount int, imageDurations []float64, transitionType string, transitionDuration float64, resolution string) string {
+    // Start building filter complex
+    var filterParts []string
+    
+    // Scale all images to the same size with proper format
+    for i := 0; i < imageCount; i++ {
+        filterParts = append(filterParts, fmt.Sprintf("[%d:v]scale=%s:force_divisible_by=2,setsar=1,format=yuv420p[v%d]", 
+            i, resolution, i))
+    }
+    
+    // If only one image, no transitions needed
+    if imageCount == 1 {
+        return strings.Join(filterParts, ";")
+    }
+    
+    // Add holds for each image (with proper duration)
+    for i := 0; i < imageCount; i++ {
+        // For regular hold, we'll trim to the full duration
+        filterParts = append(filterParts, fmt.Sprintf("[v%d]trim=duration=%.3f,setpts=PTS-STARTPTS[hold%d]", 
+            i, imageDurations[i], i))
+    }
+    
+    // Generate transitions between images
+    currentOffset := imageDurations[0] - transitionDuration
+    lastOutput := "hold0"
+    
+    for i := 1; i < imageCount; i++ {
+        // Ensure offset is not negative
+        if currentOffset < 0 {
+            currentOffset = 0
+        }
+        
+        // Create xfade transition
+        filterParts = append(filterParts, fmt.Sprintf("[%s][hold%d]xfade=transition=%s:duration=%.3f:offset=%.3f[trans%d]", 
+            lastOutput, i, transitionType, transitionDuration, currentOffset, i))
+        
+        lastOutput = fmt.Sprintf("trans%d", i)
+        
+        // Update offset for next transition
+        currentOffset += imageDurations[i] - transitionDuration
+    }
+    
+    // Join all parts with semicolons
+    return strings.Join(filterParts, ";")
 }
 
 // getResolution returns the resolution based on the quality setting
