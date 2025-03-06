@@ -20,6 +20,7 @@ import (
 	"github.com/serisow/lesocle/server"
 	"github.com/serisow/lesocle/social_media_step"
 	"github.com/serisow/lesocle/upload_step"
+	"github.com/serisow/lesocle/video"
 
 	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/llm_service"
@@ -137,7 +138,10 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("facebook_share", action_service.NewFacebookShareActionService(logger))
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
-    registry.RegisterActionService("video_generation", action_service.NewVideoGenerationActionService(logger))
+    
+	
+	//registry.RegisterActionService("video_generation", action_service.NewVideoGenerationActionService(logger))
+	registry.RegisterActionService("video_generation", video.NewVideoGenerationActionService(logger))
 
 	
 }
