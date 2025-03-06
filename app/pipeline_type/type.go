@@ -101,6 +101,7 @@ type UploadImageConfig struct {
 	FileName string  `json:"image_file_name"`
 	FileSize int64   `json:"image_file_size"`
 	Duration float64 `json:"duration"`
+	TextOverlay  map[string]interface{} `json:"text_overlay,omitempty"`
 }
 
 // UploadAudioConfig holds configuration for upload audio steps

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -28,15 +29,16 @@ type VideoGenerationActionService struct {
 
 // FileInfo represents standardized file information
 type FileInfo struct {
-	FileID    int64   `json:"file_id"`
-	URI       string  `json:"uri"`
-	URL       string  `json:"url"`
-	MimeType  string  `json:"mime_type"`
-	Filename  string  `json:"filename"`
-	Size      int64   `json:"size"`
-	Timestamp int64   `json:"timestamp"`
-	Duration  float64 `json:"duration,omitempty"`
-	StepKey   string  `json:"step_key,omitempty"`
+	FileID      int64                  `json:"file_id"`
+	URI         string                 `json:"uri"`
+	URL         string                 `json:"url"`
+	MimeType    string                 `json:"mime_type"`
+	Filename    string                 `json:"filename"`
+	Size        int64                  `json:"size"`
+	Timestamp   int64                  `json:"timestamp"`
+	Duration    float64                `json:"duration,omitempty"`
+	StepKey     string                 `json:"step_key,omitempty"`
+	TextOverlay map[string]interface{} `json:"text_overlay,omitempty"`
 }
 
 func NewVideoGenerationActionService(logger *slog.Logger) *VideoGenerationActionService {
@@ -79,6 +81,14 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 		if _, err := os.Stat(imagePaths[i]); os.IsNotExist(err) {
 			return "", fmt.Errorf("image file not found at path: %s", imagePaths[i])
 		}
+
+		// Log text overlay settings if present
+		if imageFile.TextOverlay != nil && s.validateTextOverlayConfig(imageFile.TextOverlay) {
+			s.logger.Debug("Image has text overlay configuration",
+				slog.String("image", imageFile.Filename),
+				slog.String("text", fmt.Sprintf("%v", imageFile.TextOverlay["text"])),
+				slog.String("position", fmt.Sprintf("%v", imageFile.TextOverlay["position"])))
+		}
 	}
 
 	audioFilePath := s.uriToFilePath(audioFileInfo.URI)
@@ -115,10 +125,11 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 		return "", fmt.Errorf("failed to get audio duration: %w", err)
 	}
 
-	// Get transition configuration
+	// Get transition duration from config
 	transitionDurationStr := getStringValue(config, "transition_duration", "1")
 	transitionDuration, err := strconv.ParseFloat(transitionDurationStr, 64)
 	if err != nil {
+		// Default to 1 second if parsing fails
 		transitionDuration = 1.0
 		s.logger.Warn("Failed to parse transition_duration, using default",
 			slog.String("value", transitionDurationStr),
@@ -128,8 +139,8 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 	// Calculate durations for each image
 	imageDurations := s.calculateImageDurations(imageFiles, audioDuration, transitionDuration)
 
-	// Create video using FFmpeg
-	err = s.createMultiImageVideo(imagePaths, imageDurations, audioFilePath, outputPath, resolution, config)
+	// Create video using FFmpeg with text overlays
+	err = s.createMultiImageVideo(imagePaths, imageDurations, audioFilePath, outputPath, resolution, config, imageFiles, pipelineContext)
 	if err != nil {
 		return "", fmt.Errorf("failed to create video: %w", err)
 	}
@@ -143,11 +154,21 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 	// Create response with slide information
 	slides := make([]map[string]interface{}, len(imageFiles))
 	for i, imageFile := range imageFiles {
-		slides[i] = map[string]interface{}{
+		slideInfo := map[string]interface{}{
 			"file_id":  imageFile.FileID,
 			"duration": imageDurations[i],
 			"step_key": imageFile.StepKey,
 		}
+
+		// Include text overlay info in response if available
+		if imageFile.TextOverlay != nil && s.validateTextOverlayConfig(imageFile.TextOverlay) {
+			slideInfo["text_overlay"] = map[string]interface{}{
+				"text":     imageFile.TextOverlay["text"],
+				"position": imageFile.TextOverlay["position"],
+			}
+		}
+
+		slides[i] = slideInfo
 	}
 
 	// Create response
@@ -194,9 +215,19 @@ func (s *VideoGenerationActionService) findFilesByOutputType(pipelineContext *pi
 			fileInfo, err := s.parseFileInfo(stepOutput, outputType)
 			if err == nil {
 				fileInfo.StepKey = step.StepOutputKey
-				if outputType == "featured_image" && step.UploadImageConfig != nil && step.UploadImageConfig.Duration > 0 {
-					fileInfo.Duration = step.UploadImageConfig.Duration
+
+				// Add duration from UploadImageConfig if available
+				if outputType == "featured_image" && step.UploadImageConfig != nil {
+					if step.UploadImageConfig.Duration > 0 {
+						fileInfo.Duration = step.UploadImageConfig.Duration
+					}
+
+					// Add text overlay settings if available
+					if step.UploadImageConfig.TextOverlay != nil {
+						fileInfo.TextOverlay = step.UploadImageConfig.TextOverlay
+					}
 				}
+
 				files = append(files, fileInfo)
 				s.logger.Info("Found file info from step with matching output_type",
 					slog.String("step_id", step.ID),
@@ -217,6 +248,20 @@ func (s *VideoGenerationActionService) findFilesByOutputType(pipelineContext *pi
 				fileInfo, err := s.parseFileInfo(value, outputType)
 				if err == nil {
 					fileInfo.StepKey = key
+
+					// Try to find associated step to get text overlay
+					for _, step := range pipelineContext.Steps {
+						if step.StepOutputKey == key && step.UploadImageConfig != nil {
+							if step.UploadImageConfig.Duration > 0 {
+								fileInfo.Duration = step.UploadImageConfig.Duration
+							}
+							if step.UploadImageConfig.TextOverlay != nil {
+								fileInfo.TextOverlay = step.UploadImageConfig.TextOverlay
+							}
+							break
+						}
+					}
+
 					files = append(files, fileInfo)
 					s.logger.Info("Found file info from key scan",
 						slog.String("key", key),
@@ -399,13 +444,14 @@ func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputT
 
 			// Create a file info structure for the downloaded image
 			fileInfo := &FileInfo{
-				FileID:    0,
-				URI:       localFilePath,
-				URL:       url,
-				MimeType:  detectMimeType(url, "image/jpeg"),
-				Filename:  filepath.Base(localFilePath),
-				Size:      0,
-				Timestamp: time.Now().Unix(),
+				FileID:      0,
+				URI:         localFilePath,
+				URL:         url,
+				MimeType:    detectMimeType(url, "image/jpeg"),
+				Filename:    filepath.Base(localFilePath),
+				Size:        0,
+				Timestamp:   time.Now().Unix(),
+				TextOverlay: nil, // Initialize with nil for direct URLs
 			}
 
 			return fileInfo, nil
@@ -416,14 +462,15 @@ func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputT
 			// First try with a custom struct that matches the actual format from services
 			// Many audio services return file_id as a string rather than a number
 			var audioResponse struct {
-				FileID    string  `json:"file_id"`
-				URI       string  `json:"uri"`
-				URL       string  `json:"url"`
-				MimeType  string  `json:"mime_type"`
-				Filename  string  `json:"filename"`
-				Size      int64   `json:"size"`
-				Duration  float64 `json:"duration,omitempty"`
-				Timestamp int64   `json:"timestamp"`
+				FileID      string                 `json:"file_id"`
+				URI         string                 `json:"uri"`
+				URL         string                 `json:"url"`
+				MimeType    string                 `json:"mime_type"`
+				Filename    string                 `json:"filename"`
+				Size        int64                  `json:"size"`
+				Duration    float64                `json:"duration,omitempty"`
+				Timestamp   int64                  `json:"timestamp"`
+				TextOverlay map[string]interface{} `json:"text_overlay,omitempty"`
 			}
 
 			if err := json.Unmarshal([]byte(url), &audioResponse); err == nil && audioResponse.URI != "" {
@@ -434,14 +481,15 @@ func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputT
 				}
 
 				fileInfo := &FileInfo{
-					FileID:    fileID,
-					URI:       audioResponse.URI,
-					URL:       audioResponse.URL,
-					MimeType:  audioResponse.MimeType,
-					Filename:  audioResponse.Filename,
-					Size:      audioResponse.Size,
-					Duration:  audioResponse.Duration,
-					Timestamp: audioResponse.Timestamp,
+					FileID:      fileID,
+					URI:         audioResponse.URI,
+					URL:         audioResponse.URL,
+					MimeType:    audioResponse.MimeType,
+					Filename:    audioResponse.Filename,
+					Size:        audioResponse.Size,
+					Duration:    audioResponse.Duration,
+					Timestamp:   audioResponse.Timestamp,
+					TextOverlay: audioResponse.TextOverlay,
 				}
 
 				// Check if this matches the expected output type
@@ -528,6 +576,11 @@ func (s *VideoGenerationActionService) parseFileInfo(output interface{}, outputT
 			// Try to extract Duration if available
 			if duration, ok := mapData["duration"].(float64); ok {
 				fileInfo.Duration = duration
+			}
+
+			// Extract text overlay settings if available
+			if textOverlay, ok := mapData["text_overlay"].(map[string]interface{}); ok {
+				fileInfo.TextOverlay = textOverlay
 			}
 
 			// Validate the file info matches the expected output type
@@ -640,7 +693,7 @@ func (s *VideoGenerationActionService) getAudioDuration(filePath string) (float6
 }
 
 // createMultiImageVideo creates a video from multiple images and an audio file
-func (s *VideoGenerationActionService) createMultiImageVideo(imagePaths []string, imageDurations []float64, audioPath string, outputPath string, resolution string, config map[string]interface{}) error {
+func (s *VideoGenerationActionService) createMultiImageVideo(imagePaths []string, imageDurations []float64, audioPath string, outputPath string, resolution string, config map[string]interface{}, imageFiles []*FileInfo, pipelineContext *pipeline_type.Context) error {
 	if len(imagePaths) == 0 {
 		return fmt.Errorf("no image paths provided")
 	}
@@ -657,15 +710,6 @@ func (s *VideoGenerationActionService) createMultiImageVideo(imagePaths []string
 			slog.Float64("default", transitionDuration))
 	}
 
-	// Get audio duration
-	audioDuration, err := s.getAudioDuration(audioPath)
-	if err != nil {
-		return fmt.Errorf("failed to get audio duration: %w", err)
-	}
-
-	// Calculate durations for each image with transition consideration
-	imageDurations = s.calculateImageDurations(imageDurations, audioDuration, transitionDuration)
-
 	// Build ffmpeg command
 	args := []string{}
 
@@ -677,19 +721,89 @@ func (s *VideoGenerationActionService) createMultiImageVideo(imagePaths []string
 	// Add audio input
 	args = append(args, "-i", audioPath)
 
-	// Create filter complex string for transitions
-	filterComplex := s.buildTransitionFilterComplex(len(imagePaths), imageDurations, transitionType, transitionDuration, resolution)
+	// Create filter complex string for transitions with text overlays
+	filterComplex := ""
 
-	// Add filter complex
-	args = append(args, "-filter_complex", filterComplex)
+	// Scale and format each image, adding text overlay if configured
+	for i := 0; i < len(imagePaths); i++ {
+		// Basic image scaling filter
+		imgFilter := fmt.Sprintf("[%d:v]scale=%s:force_divisible_by=2,setsar=1,format=yuv420p",
+			i, resolution)
 
-	// Map the last output and audio stream
-	outputLabel := fmt.Sprintf("v%d", len(imagePaths)-1)
-	if len(imagePaths) > 1 {
-		outputLabel = fmt.Sprintf("trans%d", len(imagePaths)-1)
+		// Check if this image has text overlay configuration
+		if i < len(imageFiles) && imageFiles[i].TextOverlay != nil {
+			if s.validateTextOverlayConfig(imageFiles[i].TextOverlay) {
+				// Process text - replace placeholders with values from context
+				text := imageFiles[i].TextOverlay["text"].(string)
+				processedText := s.processTextContent(text, pipelineContext)
+
+				// Get position from config
+				position := "bottom"
+				if pos, ok := imageFiles[i].TextOverlay["position"].(string); ok && pos != "" {
+					position = pos
+				}
+
+				// Build the drawtext filter
+				textFilter := s.buildTextOverlayFilter(imageFiles[i].TextOverlay, processedText, position)
+
+				// Chain the text filter to the image scaling
+				imgFilter += "," + textFilter
+			}
+		}
+
+		// Complete this image's filter chain
+		imgFilter += fmt.Sprintf("[v%d]", i)
+
+		// Add to the overall filter complex
+		if filterComplex != "" {
+			filterComplex += ";"
+		}
+		filterComplex += imgFilter
 	}
 
-	args = append(args, "-map", fmt.Sprintf("[%s]", outputLabel), "-map", fmt.Sprintf("%d:a", len(imagePaths)))
+	// Add trimming for each image
+	for i := 0; i < len(imagePaths); i++ {
+		if filterComplex != "" {
+			filterComplex += ";"
+		}
+		filterComplex += fmt.Sprintf("[v%d]trim=duration=%.3f,setpts=PTS-STARTPTS[hold%d]",
+			i, imageDurations[i], i)
+	}
+
+	// If there's only one image, just use it directly
+	if len(imagePaths) == 1 {
+		args = append(args, "-filter_complex", filterComplex)
+		args = append(args, "-map", "[hold0]", "-map", "1:a")
+	} else {
+		// Generate transitions between images
+		currentOffset := imageDurations[0] - transitionDuration
+		lastOutput := "hold0"
+
+		for i := 1; i < len(imagePaths); i++ {
+			// Ensure offset is not negative
+			if currentOffset < 0 {
+				currentOffset = 0
+			}
+
+			// Add transition to filter complex
+			if filterComplex != "" {
+				filterComplex += ";"
+			}
+			filterComplex += fmt.Sprintf("[%s][hold%d]xfade=transition=%s:duration=%.3f:offset=%.3f[trans%d]",
+				lastOutput, i, transitionType, transitionDuration, currentOffset, i)
+
+			lastOutput = fmt.Sprintf("trans%d", i)
+
+			// Update offset for next transition
+			currentOffset += imageDurations[i] - transitionDuration
+		}
+
+		// Add filter complex to command
+		args = append(args, "-filter_complex", filterComplex)
+
+		// Map final output and audio
+		args = append(args, "-map", fmt.Sprintf("[%s]", lastOutput), "-map", fmt.Sprintf("%d:a", len(imagePaths)))
+	}
 
 	// Add encoding parameters
 	args = append(args,
@@ -877,4 +991,155 @@ func detectMimeType(url string, defaultMime string) string {
 
 func (s *VideoGenerationActionService) CanHandle(actionService string) bool {
 	return actionService == VideoGenerationServiceName
+}
+
+// processTextContent replaces placeholder variables in text overlay content
+func (s *VideoGenerationActionService) processTextContent(text string, pipelineContext *pipeline_type.Context) string {
+	// Look for placeholders in the format {step_output_key}
+	return regexp.MustCompile(`\{([^}]+)\}`).ReplaceAllStringFunc(text, func(placeholder string) string {
+		// Extract key from placeholder
+		key := strings.Trim(placeholder, "{}")
+
+		// Look up the value in the context
+		if value, exists := pipelineContext.GetStepOutput(key); exists {
+			// Convert the value to string based on its type
+			switch v := value.(type) {
+			case string:
+				return v
+			case map[string]interface{}:
+				// If it's a map, try to extract a meaningful value
+				if textValue, ok := v["text"].(string); ok {
+					return textValue
+				}
+				// Fallback to JSON representation
+				if jsonBytes, err := json.Marshal(v); err == nil {
+					return string(jsonBytes)
+				}
+			}
+			// For other types, convert to string
+			return fmt.Sprintf("%v", value)
+		}
+
+		// Return the original placeholder if key not found
+		return placeholder
+	})
+}
+
+// getTextPosition calculates position parameters for FFmpeg drawtext filter
+func (s *VideoGenerationActionService) getTextPosition(position string, resolution string, customCoords map[string]string) string {
+	// Default margin
+	margin := 20
+
+	// Default to center if invalid
+	if position == "" {
+		position = "center"
+	}
+
+	switch position {
+	case "top":
+		return fmt.Sprintf("x=(w-text_w)/2:y=%d", margin)
+	case "bottom":
+		return fmt.Sprintf("x=(w-text_w)/2:y=h-text_h-%d", margin)
+	case "center":
+		return "x=(w-text_w)/2:y=(h-text_h)/2"
+	case "top_left":
+		return fmt.Sprintf("x=%d:y=%d", margin, margin)
+	case "top_right":
+		return fmt.Sprintf("x=w-text_w-%d:y=%d", margin, margin)
+	case "bottom_left":
+		return fmt.Sprintf("x=%d:y=h-text_h-%d", margin, margin)
+	case "bottom_right":
+		return fmt.Sprintf("x=w-text_w-%d:y=h-text_h-%d", margin, margin)
+	case "custom":
+		// Use custom coordinates if available
+		if customCoords != nil {
+			x, xExists := customCoords["x"]
+			y, yExists := customCoords["y"]
+			if xExists && yExists {
+				return fmt.Sprintf("x=%s:y=%s", x, y)
+			}
+		}
+		// Fall back to center if custom coordinates are invalid
+		return "x=(w-text_w)/2:y=(h-text_h)/2"
+	default:
+		// Default to bottom if position is not recognized
+		return fmt.Sprintf("x=(w-text_w)/2:y=h-text_h-%d", margin)
+	}
+}
+
+// buildTextOverlayFilter generates the FFmpeg drawtext filter parameters
+func (s *VideoGenerationActionService) buildTextOverlayFilter(config map[string]interface{}, text string, position string) string {
+	// Get defaults for required fields
+	text = strings.ReplaceAll(text, ":", "\\:") // Escape colons
+	text = strings.ReplaceAll(text, "'", "\\'") // Escape single quotes
+
+	// Extract configuration values with defaults
+	fontSize := "40"
+	if fs, ok := config["font_size"].(string); ok && fs != "" {
+		fontSize = fs
+	}
+
+	fontColor := "white"
+	if fc, ok := config["font_color"].(string); ok && fc != "" {
+		fontColor = fc
+	}
+
+	// Extract custom position coordinates
+	customCoords := make(map[string]string)
+	if cx, ok := config["custom_x"].(string); ok {
+		customCoords["x"] = cx
+	}
+	if cy, ok := config["custom_y"].(string); ok {
+		customCoords["y"] = cy
+	}
+
+	// Get position parameters
+	positionParams := s.getTextPosition(position, "", customCoords)
+
+	// Build the complete filter
+	filter := fmt.Sprintf("drawtext=text='%s':fontsize=%s:fontcolor=%s:%s",
+		text, fontSize, fontColor, positionParams)
+
+	// Add background box if configured
+	if backgroundColor, ok := config["background_color"].(string); ok && backgroundColor != "" {
+		filter += fmt.Sprintf(":box=1:boxcolor=%s:boxborderw=5", backgroundColor)
+	}
+
+	return filter
+}
+
+// validateTextOverlayConfig checks if the text overlay configuration is valid
+func (s *VideoGenerationActionService) validateTextOverlayConfig(config map[string]interface{}) bool {
+	// Check if enabled flag is present and true
+	enabledValue, ok := config["enabled"]
+	if !ok {
+		return false
+	}
+
+	// Check enabled value based on type
+	var enabled bool
+	switch v := enabledValue.(type) {
+	case string:
+		enabled = v == "1" || strings.ToLower(v) == "true"
+	case bool:
+		enabled = v
+	case float64:
+		enabled = v == 1
+	case int:
+		enabled = v == 1
+	default:
+		enabled = false
+	}
+
+	if !enabled {
+		return false
+	}
+
+	// Check if text is present and not empty
+	text, ok := config["text"].(string)
+	if !ok || text == "" {
+		return false
+	}
+
+	return true
 }
