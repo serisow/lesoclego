@@ -1,7 +1,6 @@
-# Use the latest Go image based on Debian
 FROM golang:latest
 
-# Install build and runtime dependencies
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     git \
     poppler-utils \
@@ -10,10 +9,20 @@ RUN apt-get update && apt-get install -y \
     tidy \
     tesseract-ocr \
     tesseract-ocr-eng \
-    ffmpeg \
-    vim \
     ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+    wget \
+    xz-utils \
+    fontconfig \
+    libfreetype6 \
+    && rm -rf /var/lib/apt/lists/*
 
- # Verify FFmpeg installation
-RUN which ffmpeg && ffmpeg -version
+# Install FFmpeg 6.1.2 (BtbN build with drawtext support)
+RUN wget https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-03-09-12-54/ffmpeg-n6.1.2-25-g39cac587c4-linux64-gpl-6.1.tar.xz \
+    && tar -xf ffmpeg-n6.1.2-*.tar.xz \
+    && mv ffmpeg-n6.1.2-*/bin/ffmpeg /usr/local/bin/ \
+    && mv ffmpeg-n6.1.2-*/bin/ffprobe /usr/local/bin/ \
+    && rm -rf ffmpeg-n6.1.2-*
+
+
+# Verify FFmpeg and drawtext filter
+RUN ffmpeg -filters | grep drawtext
