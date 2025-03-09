@@ -47,19 +47,11 @@ func (fm *FileManagerImpl) FindFilesByOutputType(ctx context.Context, pipelineCo
 			if err == nil {
 				fileInfo.StepKey = step.StepOutputKey
 
-				// Add duration from VideoSettings if available
+				// Add duration
 				if outputType == "featured_image" && step.UploadImageConfig != nil {
-					// Check for duration in video_settings
-					if step.UploadImageConfig.VideoSettings != nil {
-						if durationStr, ok := step.UploadImageConfig.VideoSettings["duration"].(string); ok {
-							if duration, err := strconv.ParseFloat(durationStr, 64); err == nil {
-								fileInfo.Duration = duration
-							}
-						}
-					}
-
+					fileInfo.Duration = step.UploadImageConfig.Duration
 					// Extract text blocks if they exist
-					if step.UploadImageConfig.TextBlocks != nil && len(step.UploadImageConfig.TextBlocks) > 0 {
+					if len(step.UploadImageConfig.TextBlocks) > 0 {
 						fileInfo.TextBlocks = make([]TextBlock, 0, len(step.UploadImageConfig.TextBlocks))
 						
 						for _, blockData := range step.UploadImageConfig.TextBlocks {
@@ -100,17 +92,9 @@ func (fm *FileManagerImpl) FindFilesByOutputType(ctx context.Context, pipelineCo
 					// Try to find associated step to get text blocks and duration
 					for _, step := range pipelineContext.Steps {
 						if step.StepOutputKey == key && step.UploadImageConfig != nil {
-							// Get duration from video_settings
-							if step.UploadImageConfig.VideoSettings != nil {
-								if durationStr, ok := step.UploadImageConfig.VideoSettings["duration"].(string); ok {
-									if duration, err := strconv.ParseFloat(durationStr, 64); err == nil {
-										fileInfo.Duration = duration
-									}
-								}
-							}
-							
+							fileInfo.Duration = step.UploadImageConfig.Duration
 							// Extract text blocks
-							if step.UploadImageConfig.TextBlocks != nil && len(step.UploadImageConfig.TextBlocks) > 0 {
+							if len(step.UploadImageConfig.TextBlocks) > 0 {
 								fileInfo.TextBlocks = make([]TextBlock, 0, len(step.UploadImageConfig.TextBlocks))
 								
 								for _, blockData := range step.UploadImageConfig.TextBlocks {
