@@ -17,7 +17,6 @@ type FileInfo struct {
 	Timestamp   int64                  `json:"timestamp"`
 	Duration    float64                `json:"duration,omitempty"`
 	StepKey     string                 `json:"step_key,omitempty"`
-	TextOverlay map[string]interface{} `json:"text_overlay,omitempty"`
 }
 
 // VideoParams contains all parameters needed for video generation

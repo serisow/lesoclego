@@ -53,10 +53,6 @@ func (fm *FileManagerImpl) FindFilesByOutputType(ctx context.Context, pipelineCo
 						fileInfo.Duration = step.UploadImageConfig.Duration
 					}
 
-					// Add text overlay settings if available
-					if step.UploadImageConfig.TextOverlay != nil {
-						fileInfo.TextOverlay = step.UploadImageConfig.TextOverlay
-					}
 				}
 
 				files = append(files, fileInfo)
@@ -85,9 +81,6 @@ func (fm *FileManagerImpl) FindFilesByOutputType(ctx context.Context, pipelineCo
 						if step.StepOutputKey == key && step.UploadImageConfig != nil {
 							if step.UploadImageConfig.Duration > 0 {
 								fileInfo.Duration = step.UploadImageConfig.Duration
-							}
-							if step.UploadImageConfig.TextOverlay != nil {
-								fileInfo.TextOverlay = step.UploadImageConfig.TextOverlay
 							}
 							break
 						}
@@ -255,7 +248,6 @@ func (fm *FileManagerImpl) parseFileInfo(output interface{}, outputType string) 
 				Filename:    filepath.Base(localFilePath),
 				Size:        0,
 				Timestamp:   time.Now().Unix(),
-				TextOverlay: nil, // Initialize with nil for direct URLs
 			}
 
 			return fileInfo, nil
@@ -293,7 +285,6 @@ func (fm *FileManagerImpl) parseFileInfo(output interface{}, outputType string) 
 					Size:        audioResponse.Size,
 					Duration:    audioResponse.Duration,
 					Timestamp:   audioResponse.Timestamp,
-					TextOverlay: audioResponse.TextOverlay,
 				}
 
 				// Check if this matches the expected output type
@@ -380,11 +371,6 @@ func (fm *FileManagerImpl) parseFileInfo(output interface{}, outputType string) 
 			// Try to extract Duration if available
 			if duration, ok := mapData["duration"].(float64); ok {
 				fileInfo.Duration = duration
-			}
-
-			// Extract text overlay settings if available
-			if textOverlay, ok := mapData["text_overlay"].(map[string]interface{}); ok {
-				fileInfo.TextOverlay = textOverlay
 			}
 
 			// Validate the file info matches the expected output type

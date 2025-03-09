@@ -77,13 +77,6 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 			return "", fmt.Errorf("image file not found at path: %s", imagePaths[i])
 		}
 
-		// Log text overlay settings if present
-		if imageFile.TextOverlay != nil && s.textProcessor.ValidateTextOverlayConfig(imageFile.TextOverlay) {
-			s.logger.Debug("Image has text overlay configuration",
-				slog.String("image", imageFile.Filename),
-				slog.String("text", fmt.Sprintf("%v", imageFile.TextOverlay["text"])),
-				slog.String("position", fmt.Sprintf("%v", imageFile.TextOverlay["position"])))
-		}
 	}
 
 	audioFilePath := s.fileManager.URIToFilePath(audioFileInfo.URI)
@@ -161,15 +154,6 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 			"duration": imageDurations[i],
 			"step_key": imageFile.StepKey,
 		}
-
-		// Include text overlay info in response if available
-		if imageFile.TextOverlay != nil && s.textProcessor.ValidateTextOverlayConfig(imageFile.TextOverlay) {
-			slideInfo["text_overlay"] = map[string]interface{}{
-				"text":     imageFile.TextOverlay["text"],
-				"position": imageFile.TextOverlay["position"],
-			}
-		}
-
 		slides[i] = slideInfo
 	}
 

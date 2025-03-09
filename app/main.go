@@ -140,7 +140,6 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
     
 	
-	//registry.RegisterActionService("video_generation", action_service.NewVideoGenerationActionService(logger))
 	registry.RegisterActionService("video_generation", video.NewVideoGenerationActionService(logger))
 
 	

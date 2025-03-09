@@ -183,27 +183,6 @@ func (fe *FFmpegExecutorImpl) CreateMultiImageVideo(params VideoParams) error {
 		imgFilter := fmt.Sprintf("[%d:v]scale=%s:force_divisible_by=2,setsar=1,format=yuv420p",
 			i, params.Resolution)
 
-		// Check if this image has text overlay configuration
-		if i < len(params.ImageFiles) && params.ImageFiles[i].TextOverlay != nil {
-			if fe.textProcessor.ValidateTextOverlayConfig(params.ImageFiles[i].TextOverlay) {
-				// Process text - replace placeholders with values from context
-				text := params.ImageFiles[i].TextOverlay["text"].(string)
-				processedText := fe.textProcessor.ProcessTextContent(text, params.PipelineContext)
-
-				// Get position from config
-				position := "bottom"
-				if pos, ok := params.ImageFiles[i].TextOverlay["position"].(string); ok && pos != "" {
-					position = pos
-				}
-
-				// Build the drawtext filter
-				textFilter := fe.textProcessor.BuildTextOverlayFilter(params.ImageFiles[i].TextOverlay, processedText, position)
-
-				// Chain the text filter to the image scaling
-				imgFilter += "," + textFilter
-			}
-		}
-
 		// Complete this image's filter chain
 		imgFilter += fmt.Sprintf("[v%d]", i)
 
