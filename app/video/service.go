@@ -27,10 +27,11 @@ type VideoGenerationActionService struct {
 
 // NewVideoGenerationActionService creates a new video generation service
 func NewVideoGenerationActionService(logger *slog.Logger) *VideoGenerationActionService {
+	// Create a concrete implementation of the TextProcessor interface
 	textProcessor := NewTextProcessor()
 	return &VideoGenerationActionService{
-		logger:        logger,
-		fileManager:   NewFileManager(logger),
+		logger:         logger,
+		fileManager:    NewFileManager(logger),
 		ffmpegExecutor: NewFFmpegExecutor(logger, textProcessor),
 		textProcessor:  textProcessor,
 	}
@@ -154,6 +155,28 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 			"duration": imageDurations[i],
 			"step_key": imageFile.StepKey,
 		}
+		
+		// Include text blocks info in response
+		if len(imageFile.TextBlocks) > 0 {
+			textBlocksInfo := make([]map[string]interface{}, 0)
+			for _, block := range imageFile.TextBlocks {
+				if block.Enabled {
+					blockInfo := map[string]interface{}{
+						"id":       block.ID,
+						"text":     block.Text,
+						"position": block.Position,
+						"font_size": block.FontSize,
+						"font_color": block.FontColor,
+					}
+					if block.BackgroundColor != "" {
+						blockInfo["background_color"] = block.BackgroundColor
+					}
+					textBlocksInfo = append(textBlocksInfo, blockInfo)
+				}
+			}
+			slideInfo["text_blocks"] = textBlocksInfo
+		}
+		
 		slides[i] = slideInfo
 	}
 

@@ -28,7 +28,7 @@ func NewFileManager(logger *slog.Logger) FileManager {
 	}
 }
 
-// FindFilesByOutputType returns all files matching a specific output type
+// Updated FindFilesByOutputType method in FileManagerImpl struct
 func (fm *FileManagerImpl) FindFilesByOutputType(ctx context.Context, pipelineContext *pipeline_type.Context, outputType string) ([]*FileInfo, error) {
 	fm.logger.Info("Looking for files with output type", slog.String("output_type", outputType))
 
@@ -47,12 +47,33 @@ func (fm *FileManagerImpl) FindFilesByOutputType(ctx context.Context, pipelineCo
 			if err == nil {
 				fileInfo.StepKey = step.StepOutputKey
 
-				// Add duration from UploadImageConfig if available
+				// Add duration from VideoSettings if available
 				if outputType == "featured_image" && step.UploadImageConfig != nil {
-					if step.UploadImageConfig.Duration > 0 {
-						fileInfo.Duration = step.UploadImageConfig.Duration
+					// Check for duration in video_settings
+					if step.UploadImageConfig.VideoSettings != nil {
+						if durationStr, ok := step.UploadImageConfig.VideoSettings["duration"].(string); ok {
+							if duration, err := strconv.ParseFloat(durationStr, 64); err == nil {
+								fileInfo.Duration = duration
+							}
+						}
 					}
 
+					// Extract text blocks if they exist
+					if step.UploadImageConfig.TextBlocks != nil && len(step.UploadImageConfig.TextBlocks) > 0 {
+						fileInfo.TextBlocks = make([]TextBlock, 0, len(step.UploadImageConfig.TextBlocks))
+						
+						for _, blockData := range step.UploadImageConfig.TextBlocks {
+							block := parseTextBlock(blockData)
+							// Only add enabled blocks with non-empty text
+							if block.Enabled && block.Text != "" {
+								fileInfo.TextBlocks = append(fileInfo.TextBlocks, block)
+							}
+						}
+						
+						fm.logger.Debug("Extracted text blocks",
+							slog.Int("count", len(fileInfo.TextBlocks)),
+							slog.String("step_id", step.ID))
+					}
 				}
 
 				files = append(files, fileInfo)
@@ -75,12 +96,30 @@ func (fm *FileManagerImpl) FindFilesByOutputType(ctx context.Context, pipelineCo
 				fileInfo, err := fm.parseFileInfo(value, outputType)
 				if err == nil {
 					fileInfo.StepKey = key
-
-					// Try to find associated step to get text overlay
+					
+					// Try to find associated step to get text blocks and duration
 					for _, step := range pipelineContext.Steps {
 						if step.StepOutputKey == key && step.UploadImageConfig != nil {
-							if step.UploadImageConfig.Duration > 0 {
-								fileInfo.Duration = step.UploadImageConfig.Duration
+							// Get duration from video_settings
+							if step.UploadImageConfig.VideoSettings != nil {
+								if durationStr, ok := step.UploadImageConfig.VideoSettings["duration"].(string); ok {
+									if duration, err := strconv.ParseFloat(durationStr, 64); err == nil {
+										fileInfo.Duration = duration
+									}
+								}
+							}
+							
+							// Extract text blocks
+							if step.UploadImageConfig.TextBlocks != nil && len(step.UploadImageConfig.TextBlocks) > 0 {
+								fileInfo.TextBlocks = make([]TextBlock, 0, len(step.UploadImageConfig.TextBlocks))
+								
+								for _, blockData := range step.UploadImageConfig.TextBlocks {
+									block := parseTextBlock(blockData)
+									// Only add enabled blocks with non-empty text
+									if block.Enabled && block.Text != "" {
+										fileInfo.TextBlocks = append(fileInfo.TextBlocks, block)
+									}
+								}
 							}
 							break
 						}
@@ -248,6 +287,7 @@ func (fm *FileManagerImpl) parseFileInfo(output interface{}, outputType string) 
 				Filename:    filepath.Base(localFilePath),
 				Size:        0,
 				Timestamp:   time.Now().Unix(),
+				TextBlocks:  []TextBlock{}, 
 			}
 
 			return fileInfo, nil
@@ -255,36 +295,36 @@ func (fm *FileManagerImpl) parseFileInfo(output interface{}, outputType string) 
 
 		// Check if it's a JSON string
 		if isJSON(url) {
-			// First try with a custom struct that matches the actual format from services
-			// Many audio services return file_id as a string rather than a number
-			var audioResponse struct {
-				FileID      string                 `json:"file_id"`
-				URI         string                 `json:"uri"`
-				URL         string                 `json:"url"`
-				MimeType    string                 `json:"mime_type"`
-				Filename    string                 `json:"filename"`
-				Size        int64                  `json:"size"`
-				Duration    float64                `json:"duration,omitempty"`
-				Timestamp   int64                  `json:"timestamp"`
-				TextOverlay map[string]interface{} `json:"text_overlay,omitempty"`
+			// Try to unmarshal with text blocks field
+			var fileResponse struct {
+				FileID      string      `json:"file_id"`
+				URI         string      `json:"uri"`
+				URL         string      `json:"url"`
+				MimeType    string      `json:"mime_type"`
+				Filename    string      `json:"filename"`
+				Size        int64       `json:"size"`
+				Duration    float64     `json:"duration,omitempty"`
+				Timestamp   int64       `json:"timestamp"`
+				TextBlocks  []TextBlock `json:"text_blocks,omitempty"`
 			}
 
-			if err := json.Unmarshal([]byte(url), &audioResponse); err == nil && audioResponse.URI != "" {
+			if err := json.Unmarshal([]byte(url), &fileResponse); err == nil && fileResponse.URI != "" {
 				// Convert to our standard FileInfo format
 				var fileID int64 = 0
-				if id, err := strconv.ParseInt(audioResponse.FileID, 10, 64); err == nil {
+				if id, err := strconv.ParseInt(fileResponse.FileID, 10, 64); err == nil {
 					fileID = id
 				}
 
 				fileInfo := &FileInfo{
 					FileID:      fileID,
-					URI:         audioResponse.URI,
-					URL:         audioResponse.URL,
-					MimeType:    audioResponse.MimeType,
-					Filename:    audioResponse.Filename,
-					Size:        audioResponse.Size,
-					Duration:    audioResponse.Duration,
-					Timestamp:   audioResponse.Timestamp,
+					URI:         fileResponse.URI,
+					URL:         fileResponse.URL,
+					MimeType:    fileResponse.MimeType,
+					Filename:    fileResponse.Filename,
+					Size:        fileResponse.Size,
+					Duration:    fileResponse.Duration,
+					Timestamp:   fileResponse.Timestamp,
+					TextBlocks:  fileResponse.TextBlocks,
 				}
 
 				// Check if this matches the expected output type
@@ -298,6 +338,7 @@ func (fm *FileManagerImpl) parseFileInfo(output interface{}, outputType string) 
 
 				return fileInfo, nil
 			}
+
 
 			// If that fails, try with the standard FileInfo struct as a fallback
 			var fileInfo FileInfo
@@ -373,6 +414,20 @@ func (fm *FileManagerImpl) parseFileInfo(output interface{}, outputType string) 
 				fileInfo.Duration = duration
 			}
 
+			// Extract text blocks if available
+			if textBlocksData, ok := mapData["text_blocks"].([]interface{}); ok {
+				fileInfo.TextBlocks = make([]TextBlock, 0, len(textBlocksData))
+				
+				for _, blockInterface := range textBlocksData {
+					if blockMap, ok := blockInterface.(map[string]interface{}); ok {
+						block := parseTextBlock(blockMap)
+						if block.Enabled && block.Text != "" {
+							fileInfo.TextBlocks = append(fileInfo.TextBlocks, block)
+						}
+					}
+				}
+			}
+
 			// Validate the file info matches the expected output type
 			if outputType == "featured_image" && !isImageType(fileInfo.MimeType) && !strings.Contains(fileInfo.URI, "images") {
 				return nil, fmt.Errorf("file info doesn't match expected image type")
@@ -408,4 +463,39 @@ func (fm *FileManagerImpl) sortFilesByStepWeight(files []*FileInfo, pipelineCont
 			}
 		}
 	}
+}
+
+// parseTextBlock converts a map to a TextBlock struct
+func parseTextBlock(data map[string]interface{}) TextBlock {
+	block := TextBlock{
+		ID:              getStringValue(data, "id", ""),
+		Text:            getStringValue(data, "text", ""),
+		Position:        getStringValue(data, "position", "center"),
+		FontSize:        getStringValue(data, "font_size", "24"),
+		FontColor:       getStringValue(data, "font_color", "white"),
+		BackgroundColor: getStringValue(data, "background_color", ""),
+	}
+	
+	// Parse enabled flag
+	enabled := false
+	if e, ok := data["enabled"].(bool); ok {
+		enabled = e
+	} else if e, ok := data["enabled"].(string); ok {
+		enabled = e == "1" || strings.ToLower(e) == "true"
+	} else if e, ok := data["enabled"].(float64); ok {
+		enabled = e == 1
+	} else if e, ok := data["enabled"].(int); ok {
+		enabled = e == 1
+	}
+	block.Enabled = enabled
+	
+	// Extract custom position coordinates if present
+	if data["custom_x"] != nil {
+		block.CustomX = fmt.Sprintf("%v", data["custom_x"])
+	}
+	if data["custom_y"] != nil {
+		block.CustomY = fmt.Sprintf("%v", data["custom_y"])
+	}
+	
+	return block
 }

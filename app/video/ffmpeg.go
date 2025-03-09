@@ -7,9 +7,9 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
-
 )
 
 // FFmpegExecutorImpl implements the FFmpegExecutor interface
@@ -177,21 +177,59 @@ func (fe *FFmpegExecutorImpl) CreateMultiImageVideo(params VideoParams) error {
 	// Create filter complex string for transitions with text overlays
 	filterComplex := ""
 
-	// Scale and format each image, adding text overlay if configured
-	for i := 0; i < len(imagePaths); i++ {
-		// Basic image scaling filter
-		imgFilter := fmt.Sprintf("[%d:v]scale=%s:force_divisible_by=2,setsar=1,format=yuv420p",
-			i, params.Resolution)
-
-		// Complete this image's filter chain
-		imgFilter += fmt.Sprintf("[v%d]", i)
-
-		// Add to the overall filter complex
-		if filterComplex != "" {
-			filterComplex += ";"
-		}
-		filterComplex += imgFilter
-	}
+    // Process each image - scale and add text blocks
+    for i := 0; i < len(imagePaths); i++ {
+        // Basic image scaling filter
+        imgFilter := fmt.Sprintf("[%d:v]scale=%s:force_divisible_by=2,setsar=1,format=yuv420p",
+            i, params.Resolution)
+        
+        // Add text blocks if available for this image
+        if i < len(params.ImageFiles) && len(params.ImageFiles[i].TextBlocks) > 0 {
+            // Group blocks by position for proper layout
+            positionGroups := groupTextBlocksByPosition(params.ImageFiles[i].TextBlocks)
+            
+            // Process each position group
+            for position, blocks := range positionGroups {
+                if len(blocks) == 0 {
+                    continue
+                }
+                
+                fe.logger.Debug("Processing text blocks group", 
+                    slog.String("position", position),
+                    slog.Int("block_count", len(blocks)))
+                    
+                // Process blocks in this position group
+                for j, block := range blocks {
+                    // Process text content (replace variables)
+                    processedText := fe.textProcessor.ProcessTextContent(block.Text, params.PipelineContext)
+                    
+                    // Create a copy of the block with processed text
+                    blockWithProcessedText := block
+                    blockWithProcessedText.Text = processedText
+                    
+                    // For first block in group, use original position
+                    if j == 0 {
+                        textFilter := fe.textProcessor.BuildTextBlockFilter(blockWithProcessedText, params.Width, params.Height)
+                        imgFilter += "," + textFilter
+                    } else {
+                        // For subsequent blocks, adjust position for stacking
+                        adjustedBlock := calculateAdjustedPosition(blockWithProcessedText, position, j, params.Width, params.Height)
+                        textFilter := fe.textProcessor.BuildTextBlockFilter(adjustedBlock, params.Width, params.Height)
+                        imgFilter += "," + textFilter
+                    }
+                }
+            }
+        }
+        
+        // Complete this image's filter chain
+        imgFilter += fmt.Sprintf("[v%d]", i)
+        
+        // Add to the overall filter complex
+        if filterComplex != "" {
+            filterComplex += ";"
+        }
+        filterComplex += imgFilter
+    }
 
 	// Add trimming for each image
 	for i := 0; i < len(imagePaths); i++ {
@@ -297,4 +335,41 @@ func (fe *FFmpegExecutorImpl) CreateMultiImageVideo(params VideoParams) error {
 	}
 
 	return nil
+}
+
+func convertToFFmpegColor(color string) string {
+    // Check if it's already in a format FFmpeg understands (named color or hex)
+    if color == "" || color[0] == '#' || !strings.Contains(color, "(") {
+        return color
+    }
+    
+    // Check for rgba() format
+    rgbaRegex := regexp.MustCompile(`rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d\.]+)\s*\)`)
+    if matches := rgbaRegex.FindStringSubmatch(color); len(matches) == 5 {
+        r, _ := strconv.Atoi(matches[1])
+        g, _ := strconv.Atoi(matches[2])
+        b, _ := strconv.Atoi(matches[3])
+        a, _ := strconv.ParseFloat(matches[4], 64)
+        
+        // Convert alpha from 0-1 to 0-255
+        alpha := int(a * 255)
+        
+        // Format as 0xRRGGBBAA for FFmpeg
+        return fmt.Sprintf("0x%02x%02x%02x%02x", r, g, b, alpha)
+    }
+    
+    // Check for rgb() format
+    rgbRegex := regexp.MustCompile(`rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)`)
+    if matches := rgbRegex.FindStringSubmatch(color); len(matches) == 4 {
+        r, _ := strconv.Atoi(matches[1])
+        g, _ := strconv.Atoi(matches[2])
+        b, _ := strconv.Atoi(matches[3])
+        
+        // Format as 0xRRGGBBFF for FFmpeg (fully opaque)
+        return fmt.Sprintf("0x%02x%02x%02xff", r, g, b)
+    }
+    
+    // If we couldn't parse it, return the original string
+    // FFmpeg will show an error but we'll avoid crashing
+    return color
 }

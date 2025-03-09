@@ -2,9 +2,22 @@ package video
 
 import (
 	"context"
-	
+
 	"github.com/serisow/lesocle/pipeline_type"
 )
+
+// TextBlock represents a text overlay element on an image
+type TextBlock struct {
+	ID              string `json:"id"`
+	Enabled         bool   `json:"enabled"`
+	Text            string `json:"text"`
+	Position        string `json:"position"`
+	FontSize        string `json:"font_size"`
+	FontColor       string `json:"font_color"`
+	BackgroundColor string `json:"background_color"`
+	CustomX         string `json:"custom_x,omitempty"`
+	CustomY         string `json:"custom_y,omitempty"`
+}
 
 // FileInfo represents standardized file information
 type FileInfo struct {
@@ -17,6 +30,7 @@ type FileInfo struct {
 	Timestamp   int64                  `json:"timestamp"`
 	Duration    float64                `json:"duration,omitempty"`
 	StepKey     string                 `json:"step_key,omitempty"`
+	TextBlocks  []TextBlock            `json:"text_blocks,omitempty"`
 }
 
 // VideoParams contains all parameters needed for video generation
@@ -30,6 +44,8 @@ type VideoParams struct {
 	ImageDurations     []float64
 	Config             map[string]interface{}
 	PipelineContext    *pipeline_type.Context
+	Width              int
+	Height             int
 }
 
 // FileManager handles file operations
@@ -51,9 +67,9 @@ type FFmpegExecutor interface {
 // TextProcessor handles text overlay processing
 type TextProcessor interface {
 	ProcessTextContent(text string, pipelineContext *pipeline_type.Context) string
-	BuildTextOverlayFilter(config map[string]interface{}, text string, position string) string
-	GetTextPosition(position string, resolution string, customCoords map[string]string) string
-	ValidateTextOverlayConfig(config map[string]interface{}) bool
+	BuildTextBlockFilter(block TextBlock, width, height int) string
+	GetTextPosition(block TextBlock, width, height int) string
+	EscapeFFmpegText(text string) string
 }
 
 // VideoGenerationError represents errors in the video generation process

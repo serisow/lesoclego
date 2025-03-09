@@ -94,13 +94,15 @@ type NewsAPIConfig struct {
 
 // UploadImageConfig holds configuration for upload image steps
 type UploadImageConfig struct {
-	FileID   int64   `json:"image_file_id"`
-	FileURL  string  `json:"image_file_url"`
-	FileURI  string  `json:"image_file_uri"`
-	FileMime string  `json:"image_file_mime"`
-	FileName string  `json:"image_file_name"`
-	FileSize int64   `json:"image_file_size"`
-	Duration float64 `json:"duration"`
+	FileID        int64                    `json:"image_file_id"`
+	FileURL       string                   `json:"image_file_url"`
+	FileURI       string                   `json:"image_file_uri"`
+	FileMime      string                   `json:"image_file_mime"`
+	FileName      string                   `json:"image_file_name"`
+	FileSize      int64                    `json:"image_file_size"`
+	Duration      float64                  `json:"duration"`
+	TextBlocks    []map[string]interface{} `json:"text_blocks,omitempty"`
+	VideoSettings map[string]interface{}   `json:"video_settings,omitempty"`
 }
 
 // UploadAudioConfig holds configuration for upload audio steps
