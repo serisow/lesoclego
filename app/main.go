@@ -48,6 +48,10 @@ func main() {
 	go s.Start()
 	go s.StartCronTrigger() // Start cron trigger
 
+	// Initialize video cleanup service (retain videos for 7 days)
+	videoCleanupService := video.NewVideoCleanupService(logger, 7)
+	videoCleanupService.StartCleanupSchedule(24 * time.Hour) // Run once per day
+
     // Start the execution store cleanup
     executionResultRetention := 24 * time.Hour // Retain results for 24 hours
     cleanupInterval := 1 * time.Hour           // Run cleanup every hour

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/serisow/lesocle/pipeline_type"
+	envConfig "github.com/serisow/lesocle/config"
 )
 
 const (
@@ -180,18 +181,30 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 		slides[i] = slideInfo
 	}
 
-	// Create response
-	result := map[string]interface{}{
-		"file_id":   fmt.Sprintf("%d", time.Now().UnixNano()),
-		"uri":       outputPath,
-		"url":       fmt.Sprintf("/storage/pipeline/videos/%s/%s", time.Now().Format("2006-01"), filename),
-		"mime_type": fmt.Sprintf("video/%s", outputFormat),
-		"filename":  filename,
-		"duration":  audioDuration,
-		"size":      fileInfo.Size(),
-		"timestamp": time.Now().Unix(),
-		"slides":    slides,
-	}
+    // Extract file ID for the URL
+    fileID := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	    
+    // Load config to get base URL
+    cfg := envConfig.Load()
+    
+    // Create absolute download URL
+    absoluteDownloadURL := fmt.Sprintf("%s/api/videos/%s", cfg.ServiceBaseURL, fileID)
+
+    
+    // Create response with download URL
+    result := map[string]interface{}{
+        "file_id":   fileID,
+        "uri":       outputPath,
+        "url":       fmt.Sprintf("/storage/pipeline/videos/%s/%s", time.Now().Format("2006-01"), filename),
+        "download_url": absoluteDownloadURL,
+        "mime_type": fmt.Sprintf("video/%s", outputFormat),
+        "filename":  filename,
+        "duration":  audioDuration,
+        "size":      fileInfo.Size(),
+        "timestamp": time.Now().Unix(),
+        "slides":    slides,
+    }
 
 	resultJSON, err := json.Marshal(result)
 	if err != nil {

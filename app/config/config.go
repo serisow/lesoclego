@@ -13,6 +13,7 @@ type Config struct {
 	Environment                string
 	APIEndpoint                string
 	APIHost					   string
+	ServiceBaseURL             string
 	CheckInterval              time.Duration
 	Domains                    []string
 	CertCacheDir               string
@@ -45,6 +46,7 @@ func Load() Config {
 		Environment:                getEnv("ENVIRONMENT", "development"),
 		APIEndpoint:   				getEnv("API_ENDPOINT", "http://lesocle-dev.sa/api"),
 		APIHost:   				    getEnv("API_HOST", "lesocle-dev.sa"),
+		ServiceBaseURL:             getEnv("SERVICE_BASE_URL", "http://localhost:8086"), // Default to localhost
 		CheckInterval:              time.Duration(getEnvAsInt("CHECK_INTERVAL", 1200)) * time.Second,
 		Domains:                    []string{getEnv("DOMAIN", "example.com")},
 		CertCacheDir:               getEnv("CERT_CACHE_DIR", "/etc/letsencrypt/live/example.com"),
