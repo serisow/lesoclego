@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/serisow/lesocle/pipeline_type"
 	envConfig "github.com/serisow/lesocle/config"
+	"github.com/serisow/lesocle/pipeline_type"
 )
 
 const (
@@ -20,10 +20,10 @@ const (
 
 // VideoGenerationActionService is the main service for video generation
 type VideoGenerationActionService struct {
-	logger       *slog.Logger
-	fileManager  FileManager
+	logger         *slog.Logger
+	fileManager    FileManager
 	ffmpegExecutor FFmpegExecutor
-	textProcessor TextProcessor
+	textProcessor  TextProcessor
 }
 
 // NewVideoGenerationActionService creates a new video generation service
@@ -96,7 +96,11 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 	config := step.ActionDetails.Configuration
 	outputFormat := getStringValue(config, "output_format", "mp4")
 
-	filename := fmt.Sprintf("video_%d.%s", time.Now().UnixNano(), outputFormat)
+	// Extract file ID for the URL
+	fileID := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	filename := fmt.Sprintf("video_%s.%s", fileID, outputFormat)
+	
 	outputPath := filepath.Join(outputDir, filename)
 
 	// Get video quality settings
@@ -156,17 +160,17 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 			"duration": imageDurations[i],
 			"step_key": imageFile.StepKey,
 		}
-		
+
 		// Include text blocks info in response
 		if len(imageFile.TextBlocks) > 0 {
 			textBlocksInfo := make([]map[string]interface{}, 0)
 			for _, block := range imageFile.TextBlocks {
 				if block.Enabled {
 					blockInfo := map[string]interface{}{
-						"id":       block.ID,
-						"text":     block.Text,
-						"position": block.Position,
-						"font_size": block.FontSize,
+						"id":         block.ID,
+						"text":       block.Text,
+						"position":   block.Position,
+						"font_size":  block.FontSize,
 						"font_color": block.FontColor,
 					}
 					if block.BackgroundColor != "" {
@@ -177,34 +181,29 @@ func (s *VideoGenerationActionService) Execute(ctx context.Context, actionConfig
 			}
 			slideInfo["text_blocks"] = textBlocksInfo
 		}
-		
+
 		slides[i] = slideInfo
 	}
 
-    // Extract file ID for the URL
-    fileID := fmt.Sprintf("%d", time.Now().UnixNano())
+	// Load config to get base URL
+	cfg := envConfig.Load()
 
-	    
-    // Load config to get base URL
-    cfg := envConfig.Load()
-    
-    // Create absolute download URL
-    absoluteDownloadURL := fmt.Sprintf("%s/api/videos/%s", cfg.ServiceBaseURL, fileID)
+	// Create absolute download URL
+	absoluteDownloadURL := fmt.Sprintf("%s/api/videos/%s", cfg.ServiceBaseURL, fileID)
 
-    
-    // Create response with download URL
-    result := map[string]interface{}{
-        "file_id":   fileID,
-        "uri":       outputPath,
-        "url":       fmt.Sprintf("/storage/pipeline/videos/%s/%s", time.Now().Format("2006-01"), filename),
-        "download_url": absoluteDownloadURL,
-        "mime_type": fmt.Sprintf("video/%s", outputFormat),
-        "filename":  filename,
-        "duration":  audioDuration,
-        "size":      fileInfo.Size(),
-        "timestamp": time.Now().Unix(),
-        "slides":    slides,
-    }
+	// Create response with download URL
+	result := map[string]interface{}{
+		"file_id":      fileID,
+		"uri":          outputPath,
+		"url":          fmt.Sprintf("/storage/pipeline/videos/%s/%s", time.Now().Format("2006-01"), filename),
+		"download_url": absoluteDownloadURL,
+		"mime_type":    fmt.Sprintf("video/%s", outputFormat),
+		"filename":     filename,
+		"duration":     audioDuration,
+		"size":         fileInfo.Size(),
+		"timestamp":    time.Now().Unix(),
+		"slides":       slides,
+	}
 
 	resultJSON, err := json.Marshal(result)
 	if err != nil {

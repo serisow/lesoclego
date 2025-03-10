@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -162,23 +161,35 @@ func (h *PipelineHandler) ServeVideoFile(w http.ResponseWriter, r *http.Request)
     }
     
     // Determine file path based on storage pattern
-    year, month := time.Now().Format("2006"), time.Now().Format("01")
     basePath := filepath.Join("storage", "pipeline", "videos")
     
-    // Check if file exists in current month's directory first
-    filePath := filepath.Join(basePath, fmt.Sprintf("%s-%s", year, month), fmt.Sprintf("video_%s.mp4", fileID))
-
+    // Look for the file using a glob pattern to search across all month directories
+    pattern := filepath.Join(basePath, "*", fmt.Sprintf("video_%s.mp4", fileID))
+    matches, err := filepath.Glob(pattern)
     
-    // If file doesn't exist in current month, search in all directories
-    if _, err := os.Stat(filePath); os.IsNotExist(err) {
-        // Search in all subdirectories
-        matches, err := filepath.Glob(filepath.Join(basePath, "*", fmt.Sprintf("video_%s*.mp4", fileID)))
-        if err != nil || len(matches) == 0 {
+    if err != nil || len(matches) == 0 {
+        // Try other common video formats if mp4 isn't found
+        formats := []string{"mov", "webm", "avi", "mkv"}
+        found := false
+        
+        for _, format := range formats {
+            formatPattern := filepath.Join(basePath, "*", fmt.Sprintf("video_%s.%s", fileID, format))
+            formatMatches, formatErr := filepath.Glob(formatPattern)
+            
+            if formatErr == nil && len(formatMatches) > 0 {
+                matches = formatMatches
+                found = true
+                break
+            }
+        }
+        
+        if !found {
             http.Error(w, "Video not found", http.StatusNotFound)
             return
         }
-        filePath = matches[0]
     }
+    
+    filePath := matches[0]
     
     // Set appropriate headers
     w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(filePath)))
@@ -192,6 +203,10 @@ func (h *PipelineHandler) ServeVideoFile(w http.ResponseWriter, r *http.Request)
         w.Header().Set("Content-Type", "video/quicktime")
     case ".webm":
         w.Header().Set("Content-Type", "video/webm")
+    case ".avi":
+        w.Header().Set("Content-Type", "video/x-msvideo")
+    case ".mkv":
+        w.Header().Set("Content-Type", "video/x-matroska")
     default:
         w.Header().Set("Content-Type", "application/octet-stream")
     }
@@ -199,14 +214,6 @@ func (h *PipelineHandler) ServeVideoFile(w http.ResponseWriter, r *http.Request)
     // Stream the file
     http.ServeFile(w, r, filePath)
 }
-
-
-
-
-
-
-
-
 
 
 
