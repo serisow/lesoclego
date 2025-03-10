@@ -2,6 +2,7 @@ package video
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/serisow/lesocle/pipeline_type"
@@ -59,10 +60,23 @@ func detectMimeType(url string, defaultMime string) string {
 
 // getStringValue gets a string value from a map with a default fallback
 func getStringValue(config map[string]interface{}, key string, defaultValue string) string {
-	if val, ok := config[key].(string); ok && val != "" {
-		return val
-	}
-	return defaultValue
+    // First check if it's a string
+    if val, ok := config[key].(string); ok && val != "" {
+        return val
+    }
+    
+    // Check if it's a number (float64 is the default for JSON numbers)
+    if val, ok := config[key].(float64); ok {
+        return fmt.Sprintf("%g", val)  // %g will remove trailing zeros
+    }
+    
+    // Check if it's an integer
+    if val, ok := config[key].(int); ok {
+        return fmt.Sprintf("%d", val)
+    }
+    
+    // If not found or not a recognizable type, return default
+    return defaultValue
 }
 
 // getStepIDs extracts step IDs for logging

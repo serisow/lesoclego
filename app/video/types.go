@@ -17,6 +17,14 @@ type TextBlock struct {
 	BackgroundColor string `json:"background_color"`
 	CustomX         string `json:"custom_x,omitempty"`
 	CustomY         string `json:"custom_y,omitempty"`
+	Animation       *TextAnimation `json:"animation,omitempty"`
+}
+
+type TextAnimation struct {
+    Type     string  `json:"type"`      // fade, slide, scale, typewriter
+    Duration float64 `json:"duration"`  // in seconds
+    Delay    float64 `json:"delay"`     // in seconds
+    Easing   string  `json:"easing"`    // linear, ease-in, ease-out, ease-in-out
 }
 
 // FileInfo represents standardized file information
@@ -70,6 +78,7 @@ type TextProcessor interface {
 	BuildTextBlockFilter(block TextBlock, width, height int) string
 	GetTextPosition(block TextBlock, width, height int) string
 	EscapeFFmpegText(text string) string
+	BuildTextBlockWithAnimation(block TextBlock, width, height int, slideDuration float64, localTimeline bool) string
 }
 
 // VideoGenerationError represents errors in the video generation process

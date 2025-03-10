@@ -11,7 +11,7 @@ import (
 )
 
 // TextProcessorImpl implements the TextProcessor interface
-type TextProcessorImpl struct {}
+type TextProcessorImpl struct{}
 
 // NewTextProcessor creates a new text processor instance
 func NewTextProcessor() TextProcessor {
@@ -54,12 +54,12 @@ func (tp *TextProcessorImpl) ProcessTextContent(text string, pipelineContext *pi
 // GetTextPosition determines position parameters for FFmpeg drawtext filter
 func (tp *TextProcessorImpl) GetTextPosition(block TextBlock, width, height int) string {
 	margin := 20 // Default margin
-	
+
 	if block.Position == "custom" && block.CustomX != "" && block.CustomY != "" {
 		// For custom positions, use the exact coordinates
 		return fmt.Sprintf("x=%s:y=%s", block.CustomX, block.CustomY)
 	}
-	
+
 	switch block.Position {
 	case "top_left":
 		return fmt.Sprintf("x=%d:y=%d", margin, margin)
@@ -89,16 +89,16 @@ func (tp *TextProcessorImpl) GetTextPosition(block TextBlock, width, height int)
 func (tp *TextProcessorImpl) EscapeFFmpegText(text string) string {
 	// First, escape backslashes
 	text = strings.ReplaceAll(text, "\\", "\\\\")
-	
+
 	// Escape single quotes
 	text = strings.ReplaceAll(text, "'", "\\'")
-	
+
 	// Escape other special characters that might break the filter
 	specialChars := []string{":", ",", "[", "]", ";", "="}
 	for _, char := range specialChars {
 		text = strings.ReplaceAll(text, char, "\\"+char)
 	}
-	
+
 	return text
 }
 
@@ -116,7 +116,7 @@ func groupTextBlocksByPosition(blocks []TextBlock) map[string][]TextBlock {
 		"bottom_right": {},
 		"custom":       {},
 	}
-	
+
 	for _, block := range blocks {
 		if block.Position == "custom" {
 			groups["custom"] = append(groups["custom"], block)
@@ -127,71 +127,71 @@ func groupTextBlocksByPosition(blocks []TextBlock) map[string][]TextBlock {
 			groups["center"] = append(groups["center"], block)
 		}
 	}
-	
+
 	return groups
 }
 
 // calculateAdjustedPosition creates a new block with adjusted position for stacking
 func calculateAdjustedPosition(block TextBlock, position string, index int, width, height int) TextBlock {
-    adjustedBlock := block
-    fontSize, _ := strconv.Atoi(block.FontSize)
-    if fontSize == 0 {
-        fontSize = 24
-    }
-    
-    verticalSpacing := float64(fontSize) * 1.5
-    margin := 20
-    
-    // Always use custom positioning for adjusted blocks
-    adjustedBlock.Position = "custom"
-    
-    // Set horizontal position based on the original position group
-    switch position {
-    case "top_left", "left", "bottom_left":
-        adjustedBlock.CustomX = fmt.Sprintf("%d", margin)
-    case "top", "center", "bottom":
-        adjustedBlock.CustomX = fmt.Sprintf("%d", width/2)
-    case "top_right", "right", "bottom_right":
-        adjustedBlock.CustomX = fmt.Sprintf("%d", width-margin)
-    }
-    
-    // Set vertical position based on the group and index
-    switch position {
-    case "top_left", "top", "top_right":
-        // Stack downward from top
-        adjustedBlock.CustomY = fmt.Sprintf("%d", margin+int(float64(index)*verticalSpacing))
-    case "left", "center", "right":
-        // Alternate above and below center
-        if index%2 == 0 {
-            adjustedBlock.CustomY = fmt.Sprintf("%d", height/2+int(float64(index)*verticalSpacing/2))
-        } else {
-            adjustedBlock.CustomY = fmt.Sprintf("%d", height/2-int(float64(index)*verticalSpacing/2))
-        }
-    case "bottom_left", "bottom", "bottom_right":
-        // Stack upward from bottom
-        adjustedBlock.CustomY = fmt.Sprintf("%d", height-margin-int(float64(index)*verticalSpacing))
-    }
-    
-    return adjustedBlock
+	adjustedBlock := block
+	fontSize, _ := strconv.Atoi(block.FontSize)
+	if fontSize == 0 {
+		fontSize = 24
+	}
+
+	verticalSpacing := float64(fontSize) * 1.5
+	margin := 20
+
+	// Always use custom positioning for adjusted blocks
+	adjustedBlock.Position = "custom"
+
+	// Set horizontal position based on the original position group
+	switch position {
+	case "top_left", "left", "bottom_left":
+		adjustedBlock.CustomX = fmt.Sprintf("%d", margin)
+	case "top", "center", "bottom":
+		adjustedBlock.CustomX = fmt.Sprintf("%d", width/2)
+	case "top_right", "right", "bottom_right":
+		adjustedBlock.CustomX = fmt.Sprintf("%d", width-margin)
+	}
+
+	// Set vertical position based on the group and index
+	switch position {
+	case "top_left", "top", "top_right":
+		// Stack downward from top
+		adjustedBlock.CustomY = fmt.Sprintf("%d", margin+int(float64(index)*verticalSpacing))
+	case "left", "center", "right":
+		// Alternate above and below center
+		if index%2 == 0 {
+			adjustedBlock.CustomY = fmt.Sprintf("%d", height/2+int(float64(index)*verticalSpacing/2))
+		} else {
+			adjustedBlock.CustomY = fmt.Sprintf("%d", height/2-int(float64(index)*verticalSpacing/2))
+		}
+	case "bottom_left", "bottom", "bottom_right":
+		// Stack upward from bottom
+		adjustedBlock.CustomY = fmt.Sprintf("%d", height-margin-int(float64(index)*verticalSpacing))
+	}
+
+	return adjustedBlock
 }
 
 // BuildTextOverlayFilter generates the FFmpeg drawtext filter parameters
 func (tp *TextProcessorImpl) BuildTextBlockFilter(block TextBlock, width, height int) string {
-    // Escape special characters
-    text := tp.EscapeFFmpegText(block.Text)
-    
-    // Get position parameters
-    positionParams := tp.GetTextPosition(block, width, height)
-    
-    // Build the basic filter
-    filter := fmt.Sprintf("drawtext=text='%s':fontsize=%s:fontcolor=%s:%s", text, block.FontSize, convertToFFmpegColor(block.FontColor), positionParams)
-    
-    // Add background if specified
-    if block.BackgroundColor != "" {
-        filter += fmt.Sprintf(":box=1:boxcolor=%s:boxborderw=5", convertToFFmpegColor(block.BackgroundColor))
-    }
-    
-    return filter
+	// Escape special characters
+	text := tp.EscapeFFmpegText(block.Text)
+
+	// Get position parameters
+	positionParams := tp.GetTextPosition(block, width, height)
+
+	// Build the basic filter
+	filter := fmt.Sprintf("drawtext=text='%s':fontsize=%s:fontcolor=%s:%s", text, block.FontSize, convertToFFmpegColor(block.FontColor), positionParams)
+
+	// Add background if specified
+	if block.BackgroundColor != "" {
+		filter += fmt.Sprintf(":box=1:boxcolor=%s:boxborderw=5", convertToFFmpegColor(block.BackgroundColor))
+	}
+
+	return filter
 }
 
 // ValidateTextOverlayConfig checks if the text overlay configuration is valid
@@ -228,4 +228,213 @@ func (tp *TextProcessorImpl) ValidateTextOverlayConfig(config map[string]interfa
 	}
 
 	return true
+}
+
+func (tp *TextProcessorImpl) getSlideDirectionFromPosition(position string) string {
+	switch position {
+	case "top", "top_left", "top_right":
+		return "top"
+	case "bottom", "bottom_left", "bottom_right":
+		return "bottom"
+	case "left":
+		return "left"
+	case "right":
+		return "right"
+	case "center":
+	default:
+		// For center position, default to bottom
+		return "bottom"
+	}
+	return "unsupported_direcion"
+}
+
+func (tp *TextProcessorImpl) BuildTextBlockWithAnimation(
+	block TextBlock,
+	width, height int,
+	slideDuration float64,
+	localTimeline bool) string {
+
+	// Process text content
+	text := tp.EscapeFFmpegText(block.Text)
+
+	// Get position parameters
+	positionParams := tp.GetTextPosition(block, width, height)
+
+	// Extract position coordinates for animation calculations
+	var posX, posY int
+
+	// Parse position for animations
+	if block.Position == "custom" && block.CustomX != "" && block.CustomY != "" {
+		if x, err := strconv.Atoi(block.CustomX); err == nil {
+			posX = x
+		}
+		if y, err := strconv.Atoi(block.CustomY); err == nil {
+			posY = y
+		}
+	} else {
+		margin := 20
+		switch block.Position {
+		case "top_left":
+			posX, posY = margin, margin
+		case "top":
+			posX, posY = width/2, margin
+		case "top_right":
+			posX, posY = width-margin, margin
+		case "left":
+			posX, posY = margin, height/2
+		case "center":
+			posX, posY = width/2, height/2
+		case "right":
+			posX, posY = width-margin, height/2
+		case "bottom_left":
+			posX, posY = margin, height-margin
+		case "bottom_right":
+			posX, posY = width-margin, height-margin
+		case "bottom":
+			posX, posY = width/2, height-margin
+		}
+	}
+
+	// Parse font size for scale animation
+	fontSize := 24 // Default
+	if size, err := strconv.Atoi(block.FontSize); err == nil {
+		fontSize = size
+	}
+
+	// Build the basic filter
+	filter := fmt.Sprintf("drawtext=text='%s':fontsize=%s:fontcolor=%s:%s",
+		text, block.FontSize, convertToFFmpegColor(block.FontColor), positionParams)
+
+	// Add background if specified
+	if block.BackgroundColor != "" {
+		filter += fmt.Sprintf(":box=1:boxcolor=%s:boxborderw=5",
+			convertToFFmpegColor(block.BackgroundColor))
+	}
+
+	// Default animation values
+	animationType := "none"
+	animationDuration := 1.0
+	animationDelay := 0.0
+
+	// Extract animation parameters if present
+	if block.Animation != nil {
+		animationType = block.Animation.Type
+		animationDuration = block.Animation.Duration
+		animationDelay = block.Animation.Delay
+	}
+
+	// Ensure animation duration isn't too long
+	if animationDuration > slideDuration/2 {
+		animationDuration = slideDuration / 2
+	}
+
+	// Animation timing calculations
+	fadeInStart := animationDelay
+	fadeInEnd := fadeInStart + animationDuration
+	fadeOutStart := slideDuration - animationDuration
+	fadeOutEnd := slideDuration
+
+	// Make sure animation stays within slide boundaries
+	if fadeInEnd > slideDuration {
+		fadeInEnd = slideDuration
+	}
+	if fadeOutStart < fadeInEnd {
+		fadeOutStart = fadeInEnd
+	}
+
+	// Create enable expression for the full duration of this slide
+	filter += fmt.Sprintf(":enable='between(t,0,%.3f)'", slideDuration)
+
+	// Apply animation based on type
+	switch animationType {
+	case "fade":
+		// Fade in at start, fade out at end
+		filter += fmt.Sprintf(":alpha='if(between(t,%.3f,%.3f),(t-%.3f)/%.3f,if(between(t,%.3f,%.3f),1-(t-%.3f)/%.3f,1))'",
+			fadeInStart, fadeInEnd, // Fade in range
+			fadeInStart, animationDuration, // Fade in calculation
+			fadeOutStart, fadeOutEnd, // Fade out range
+			fadeOutStart, animationDuration) // Fade out calculation
+
+	case "slide":
+		// Determine slide direction based on position
+		slideDirection := tp.getSlideDirectionFromPosition(block.Position)
+		slideOffset := 100
+
+		if slideDirection == "left" || slideDirection == "right" {
+			if slideDirection == "left" {
+				// Slide from left
+				filter += fmt.Sprintf(":x='if(between(t,%.3f,%.3f),%.3f+(%.3f*(t-%.3f)/%.3f),%.3f)'",
+					fadeInStart, fadeInEnd, // Time range
+					float64(posX-slideOffset),                            // Starting position
+					float64(slideOffset), fadeInStart, animationDuration, // Movement calculation
+					float64(posX)) // Final position
+			} else {
+				// Slide from right
+				filter += fmt.Sprintf(":x='if(between(t,%.3f,%.3f),%.3f-(%.3f*(t-%.3f)/%.3f),%.3f)'",
+					fadeInStart, fadeInEnd, // Time range
+					float64(posX+slideOffset),                            // Starting position
+					float64(slideOffset), fadeInStart, animationDuration, // Movement calculation
+					float64(posX)) // Final position
+			}
+		} else {
+			if slideDirection == "top" {
+				// Slide from top
+				filter += fmt.Sprintf(":y='if(between(t,%.3f,%.3f),%.3f+(%.3f*(t-%.3f)/%.3f),%.3f)'",
+					fadeInStart, fadeInEnd, // Time range
+					float64(posY-slideOffset),                            // Starting position
+					float64(slideOffset), fadeInStart, animationDuration, // Movement calculation
+					float64(posY)) // Final position
+			} else {
+				// Slide from bottom
+				filter += fmt.Sprintf(":y='if(between(t,%.3f,%.3f),%.3f-(%.3f*(t-%.3f)/%.3f),%.3f)'",
+					fadeInStart, fadeInEnd, // Time range
+					float64(posY+slideOffset),                            // Starting position
+					float64(slideOffset), fadeInStart, animationDuration, // Movement calculation
+					float64(posY)) // Final position
+			}
+		}
+
+		// Add fade in for smoother appearance
+		filter += fmt.Sprintf(":alpha='if(between(t,%.3f,%.3f),(t-%.3f)/%.3f,1)'",
+			fadeInStart, fadeInEnd, // Range
+			fadeInStart, animationDuration) // Fade calculation
+
+	case "scale":
+		// Scale animation
+		filter += fmt.Sprintf(":fontsize='if(between(t,%.3f,%.3f),%.3f*(t-%.3f)/%.3f,%.3f)'",
+			fadeInStart, fadeInEnd, // Time range
+			float64(fontSize),              // Target size
+			fadeInStart, animationDuration, // Scaling calculation
+			float64(fontSize)) // Final size
+
+		// Fade in for smoother appearance
+		filter += fmt.Sprintf(":alpha='if(between(t,%.3f,%.3f),(t-%.3f)/%.3f,1)'",
+			fadeInStart, fadeInEnd, // Range
+			fadeInStart, animationDuration) // Fade calculation
+
+	case "typewriter":
+		// For typewriter effect, we need special handling for newlines and proper escaping
+		// Sanitize problematic characters for ffmpeg
+		safeText := strings.NewReplacer(
+			"@", "[at]",
+			":", " ",
+			";", " ",
+			",", " ",
+			"\\", "").Replace(block.Text)
+
+		// Create a new escaped version of the sanitized text
+		escapedText := tp.EscapeFFmpegText(safeText)
+
+		// Update the filter with the new escaped text
+		filter = strings.Replace(filter,
+			fmt.Sprintf("text='%s'", text),
+			fmt.Sprintf("text='%s'", escapedText), 1)
+
+		// Just use a simple fade-in animation like the PHP implementation
+		filter += fmt.Sprintf(":alpha='if(between(t,%.3f,%.3f),(t-%.3f)/%.3f,1)'",
+			fadeInStart, fadeInEnd,
+			fadeInStart, animationDuration)
+	}
+
+	return filter
 }

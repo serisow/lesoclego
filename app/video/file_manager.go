@@ -451,35 +451,69 @@ func (fm *FileManagerImpl) sortFilesByStepWeight(files []*FileInfo, pipelineCont
 
 // parseTextBlock converts a map to a TextBlock struct
 func parseTextBlock(data map[string]interface{}) TextBlock {
-	block := TextBlock{
-		ID:              getStringValue(data, "id", ""),
-		Text:            getStringValue(data, "text", ""),
-		Position:        getStringValue(data, "position", "center"),
-		FontSize:        getStringValue(data, "font_size", "24"),
-		FontColor:       getStringValue(data, "font_color", "white"),
-		BackgroundColor: getStringValue(data, "background_color", ""),
-	}
-	
-	// Parse enabled flag
-	enabled := false
-	if e, ok := data["enabled"].(bool); ok {
-		enabled = e
-	} else if e, ok := data["enabled"].(string); ok {
-		enabled = e == "1" || strings.ToLower(e) == "true"
-	} else if e, ok := data["enabled"].(float64); ok {
-		enabled = e == 1
-	} else if e, ok := data["enabled"].(int); ok {
-		enabled = e == 1
-	}
-	block.Enabled = enabled
-	
-	// Extract custom position coordinates if present
-	if data["custom_x"] != nil {
-		block.CustomX = fmt.Sprintf("%v", data["custom_x"])
-	}
-	if data["custom_y"] != nil {
-		block.CustomY = fmt.Sprintf("%v", data["custom_y"])
-	}
-	
-	return block
+    block := TextBlock{
+        ID:              getStringValue(data, "id", ""),
+        Text:            getStringValue(data, "text", ""),
+        Position:        getStringValue(data, "position", "center"),
+        FontSize:        getStringValue(data, "font_size", "10"),
+        FontColor:       getStringValue(data, "font_color", "white"),
+        BackgroundColor: getStringValue(data, "background_color", ""),
+    }
+    
+    // Parse enabled flag
+    enabled := false
+    if e, ok := data["enabled"].(bool); ok {
+        enabled = e
+    } else if e, ok := data["enabled"].(string); ok {
+        enabled = e == "1" || strings.ToLower(e) == "true"
+    } else if e, ok := data["enabled"].(float64); ok {
+        enabled = e == 1
+    } else if e, ok := data["enabled"].(int); ok {
+        enabled = e == 1
+    }
+    block.Enabled = enabled
+    
+    // Extract custom position coordinates if present
+    if data["custom_x"] != nil {
+        block.CustomX = fmt.Sprintf("%v", data["custom_x"])
+    }
+    if data["custom_y"] != nil {
+        block.CustomY = fmt.Sprintf("%v", data["custom_y"])
+    }
+    
+    // Extract animation settings if present
+    if animData, ok := data["animation"].(map[string]interface{}); ok {
+        block.Animation = &TextAnimation{
+            Type:     getStringValue(animData, "type", "none"),
+            Easing:   getStringValue(animData, "easing", "linear"),
+        }
+        
+        // Parse duration
+        if duration, ok := animData["duration"].(float64); ok {
+            block.Animation.Duration = duration
+        } else if durationStr, ok := animData["duration"].(string); ok {
+            if d, err := strconv.ParseFloat(durationStr, 64); err == nil {
+                block.Animation.Duration = d
+            } else {
+                block.Animation.Duration = 1.0 // Default value
+            }
+        } else {
+            block.Animation.Duration = 1.0 // Default value
+        }
+        
+        // Parse delay
+        if delay, ok := animData["delay"].(float64); ok {
+            block.Animation.Delay = delay
+        } else if delayStr, ok := animData["delay"].(string); ok {
+            if d, err := strconv.ParseFloat(delayStr, 64); err == nil {
+                block.Animation.Delay = d
+            } else {
+                block.Animation.Delay = 0.0 // Default value
+            }
+        } else {
+            block.Animation.Delay = 0.0 // Default value
+        }
+    }
+    
+    return block
 }
