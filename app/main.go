@@ -142,10 +142,8 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("facebook_share", action_service.NewFacebookShareActionService(logger))
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
-    
-	
 	registry.RegisterActionService("video_generation", video.NewVideoGenerationActionService(logger))
-
+	registry.RegisterActionService("news_item_image_generator", action_service.NewNewsItemImageGeneratorActionService(logger))
 	
 }
 
