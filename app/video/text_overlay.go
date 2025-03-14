@@ -87,19 +87,52 @@ func (tp *TextProcessorImpl) GetTextPosition(block TextBlock, width, height int)
 
 // EscapeFFmpegText escapes text for FFmpeg filter_complex parameter
 func (tp *TextProcessorImpl) EscapeFFmpegText(text string) string {
-	// First, escape backslashes
-	text = strings.ReplaceAll(text, "\\", "\\\\")
+    // First, escape backslashes with quadruple backslashes (for both shell and FFmpeg)
+    text = strings.ReplaceAll(text, "\\", "\\\\\\\\")  // FIX: Use quadruple backslashes like PHP
 
-	// Escape single quotes
-	text = strings.ReplaceAll(text, "'", "\\'")
+    // Escape single quotes (critical for shell)
+    text = strings.ReplaceAll(text, "'", "'\\''")
 
-	// Escape other special characters that might break the filter
-	specialChars := []string{":", ",", "[", "]", ";", "="}
-	for _, char := range specialChars {
-		text = strings.ReplaceAll(text, char, "\\"+char)
-	}
+    // Define pairs of characters and their escaped versions
+    replacements := map[string]string{
+        ":": "\\:",
+        ",": "\\,",
+        ";": "\\;",
+        "=": "\\=",
+        "[": "\\[",
+        "]": "\\]",
+        "?": "\\?",
+        "!": "\\!",
+        "#": "\\#",
+        "$": "\\$",
+        "%": "\\%",
+        "&": "\\&",
+        "(": "\\(",
+        ")": "\\)",
+        "*": "\\*",
+        "+": "\\+",
+        "/": "\\/",
+        "<": "\\<",
+        ">": "\\>",
+        "@": "\\@",
+        "^": "\\^",
+        "|": "\\|",
+        "~": "\\~",
+        "`": "\\`",
+        "\"": "\\\"",
+        " ": "\\ ",  // FIX: Uncommented space escaping
+        "{": "\\{",
+        "}": "\\}",
+        "\t": "\\t",
+        ".": "\\.",
+    }
 
-	return text
+    // Apply all replacements
+    for original, escaped := range replacements {
+        text = strings.ReplaceAll(text, original, escaped)
+    }
+
+    return text
 }
 
 // groupTextBlocksByPosition groups text blocks by their position

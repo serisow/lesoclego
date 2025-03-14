@@ -87,3 +87,30 @@ func getStepIDs(steps []pipeline_type.PipelineStep) []string {
 	}
 	return ids
 }
+
+// Add this function to ffmpeg.go:
+func getBoolValue(m map[string]interface{}, key string, defaultValue bool) (bool, bool) {
+    switch v := m[key].(type) {
+    case bool:
+        return v, true
+    case string:
+        if v == "1" || strings.ToLower(v) == "true" {
+            return true, true
+        } else if v == "0" || strings.ToLower(v) == "false" {
+            return false, true
+        }
+    case float64:
+        if v == 1.0 {
+            return true, true
+        } else if v == 0.0 {
+            return false, true
+        }
+    case int:
+        if v == 1 {
+            return true, true
+        } else if v == 0 {
+            return false, true
+        }
+    }
+    return defaultValue, false
+}

@@ -123,6 +123,12 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 		}
 	})
 
+	registry.RegisterStepType("image_enrichment_step", func() step.Step {
+        return &upload_step.ImageEnrichmentStepImpl{
+            Logger: logger,
+        }
+    })
+
 	// Register the LLM Services
 	registry.RegisterLLMService("openai", llm_service.NewOpenAIService(logger))
 	registry.RegisterLLMService("openai_image", llm_service.NewOpenAIImageService(logger))
