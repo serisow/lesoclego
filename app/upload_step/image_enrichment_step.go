@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -286,7 +287,7 @@ func (s *ImageEnrichmentStepImpl) downloadImage(imageInfo interface{}) (string, 
     }
     
     // Generate filename for the downloaded image
-    filename := fmt.Sprintf("image_%d_%s", time.Now().UnixNano(), filepath.Base(imageURL))
+    filename := GenerateCleanImageFilename(imageURL)
     outputPath := filepath.Join(dir, filename)
     
     // Download the image
@@ -477,3 +478,41 @@ func (s *ImageEnrichmentStepImpl) GetType() string {
     return "image_enrichment_step"
 }
 
+// GenerateCleanImageFilename creates a clean, consistent filename for downloaded images
+// Returns a filename in the format: image_[nanosecID]_[source]_[timestamp][extension]
+func GenerateCleanImageFilename(imageURL string) string {
+    // Generate unique IDs and timestamp
+    imageID := time.Now().UnixNano()
+    timestamp := time.Now().Unix()
+
+    // Parse URL to properly handle query parameters
+    parsedURL, err := url.Parse(imageURL)
+    if err != nil {
+        // Default to generic name with timestamp if URL parsing fails
+        return fmt.Sprintf("image_%d_unknown_%d.png", imageID, timestamp)
+    }
+
+    // Get the path without query params
+    cleanPath := parsedURL.Path
+    ext := filepath.Ext(cleanPath)
+    if ext == "" || len(ext) > 5 { // Safeguard against invalid extensions
+        // Default to .png if no extension or suspicious extension
+        ext = ".png"
+    }
+
+    // Determine source identifier (dalle, midjourney, etc)
+    sourceID := "image"
+    urlLower := strings.ToLower(imageURL)
+    if strings.Contains(urlLower, "dalle") || strings.Contains(urlLower, "labs.openai") {
+        sourceID = "dalle"
+    } else if strings.Contains(urlLower, "openai") {
+        sourceID = "openai"
+    } else if strings.Contains(urlLower, "midjourney") {
+        sourceID = "midjourney"
+    } else if strings.Contains(urlLower, "stability") || strings.Contains(urlLower, "dreamstudio") {
+        sourceID = "sdxl"
+    }
+
+    // Create clean filename with id, source, and timestamp
+    return fmt.Sprintf("image_%d_%s_%d%s", imageID, sourceID, timestamp, ext)
+}

@@ -7,9 +7,11 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // FFmpegExecutorImpl implements the FFmpegExecutor interface
@@ -376,6 +378,10 @@ func (fe *FFmpegExecutorImpl) CreateMultiImageVideo(params VideoParams) error {
 	// Log the command for debugging
 	fe.logger.Debug("Executing FFmpeg command", slog.Any("args", args))
 
+
+	// Add this call after building the filter complex but before executing the command
+	fe.logFFmpegCommand(args, filterComplex, nil)
+
 	// Execute command
 	cmd := exec.Command("ffmpeg", args...)
 	stderr, err := cmd.StderrPipe()
@@ -396,9 +402,10 @@ func (fe *FFmpegExecutorImpl) CreateMultiImageVideo(params VideoParams) error {
 		fe.logger.Error("FFmpeg execution failed",
 			slog.String("error", err.Error()),
 			slog.String("stderr", string(stderrOutput)))
+		// Add this line to log the command and error
+		fe.logFFmpegCommand(args, filterComplex, err)
 		return fmt.Errorf("FFmpeg execution failed: %w", err)
 	}
-
 	// Verify output file exists
 	if _, err := os.Stat(params.OutputPath); os.IsNotExist(err) {
 		return fmt.Errorf("FFmpeg did not create an output file")
@@ -506,4 +513,53 @@ func (fe *FFmpegExecutorImpl) getKenBurnsParameters(
 		return fmt.Sprintf("zoompan=z='min(1.0+%f*on,1.3)':d=%d:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
 			zoomSpeed, frames)
 	}
+}
+
+// logFFmpegCommand logs the complete FFmpeg command and any errors to files for debugging
+func (fe *FFmpegExecutorImpl) logFFmpegCommand(args []string, filterComplex string, err error) {
+    // Create logs directory if it doesn't exist
+    logsDir := filepath.Join("logs", "ffmpeg")
+    if err := os.MkdirAll(logsDir, 0755); err != nil {
+        fe.logger.Error("Failed to create FFmpeg logs directory", 
+            slog.String("error", err.Error()))
+        return
+    }
+    
+    timestamp := time.Now().Format("20060102_150405")
+    
+    // Write the filter complex to a file
+    filterPath := filepath.Join(logsDir, fmt.Sprintf("filter_%s.txt", timestamp))
+    if err := os.WriteFile(filterPath, []byte(filterComplex), 0644); err != nil {
+        fe.logger.Error("Failed to write filter complex to file", 
+            slog.String("error", err.Error()))
+    } else {
+        fe.logger.Info("Filter complex written to file for debugging", 
+            slog.String("path", filterPath))
+    }
+    
+    // Write the complete command to a file
+    cmdPath := filepath.Join(logsDir, fmt.Sprintf("command_%s.txt", timestamp))
+    cmdContent := fmt.Sprintf("ffmpeg %s\n\nFull filter_complex:\n%s", 
+        strings.Join(args, " "), filterComplex)
+    if err := os.WriteFile(cmdPath, []byte(cmdContent), 0644); err != nil {
+        fe.logger.Error("Failed to write command to file", 
+            slog.String("error", err.Error()))
+    } else {
+        fe.logger.Info("FFmpeg command written to file for debugging", 
+            slog.String("path", cmdPath))
+    }
+    
+    // If there was an error, log it too
+    if err != nil {
+        errorPath := filepath.Join(logsDir, fmt.Sprintf("error_%s.txt", timestamp))
+        errorContent := fmt.Sprintf("Error: %v\n\nCommand: ffmpeg %s\n\nFilter Complex:\n%s", 
+            err, strings.Join(args, " "), filterComplex)
+        if err := os.WriteFile(errorPath, []byte(errorContent), 0644); err != nil {
+            fe.logger.Error("Failed to write error to file", 
+                slog.String("error", err.Error()))
+        } else {
+            fe.logger.Info("FFmpeg error written to file for debugging", 
+                slog.String("path", errorPath))
+        }
+    }
 }

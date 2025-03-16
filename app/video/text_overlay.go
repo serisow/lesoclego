@@ -85,53 +85,59 @@ func (tp *TextProcessorImpl) GetTextPosition(block TextBlock, width, height int)
 	}
 }
 
-// EscapeFFmpegText escapes text for FFmpeg filter_complex parameter
+// Update the EscapeFFmpegText function in text_overlay.go
 func (tp *TextProcessorImpl) EscapeFFmpegText(text string) string {
-    // First, escape backslashes with quadruple backslashes (for both shell and FFmpeg)
-    text = strings.ReplaceAll(text, "\\", "\\\\\\\\")  // FIX: Use quadruple backslashes like PHP
+    // Replace any literal backslashes with QUADRUPLE backslashes
+    // (this is because both shell and FFmpeg will interpret them)
+    text = strings.ReplaceAll(text, "\\", "\\\\\\\\")
+    // First escape single quotes for shell
+    //text = strings.ReplaceAll(text, "'", "'\\''")
+	text = strings.ReplaceAll(text, "'", "\\'")
 
-    // Escape single quotes (critical for shell)
-    text = strings.ReplaceAll(text, "'", "'\\''")
-
-    // Define pairs of characters and their escaped versions
+	// Escape % symbol
+	text = strings.ReplaceAll(text, "%","\\%" )
+    
+    // Define replacements map for FFmpeg filter_complex syntax
     replacements := map[string]string{
-        ":": "\\:",
-        ",": "\\,",
-        ";": "\\;",
-        "=": "\\=",
-        "[": "\\[",
-        "]": "\\]",
-        "?": "\\?",
-        "!": "\\!",
-        "#": "\\#",
-        "$": "\\$",
-        "%": "\\%",
-        "&": "\\&",
-        "(": "\\(",
-        ")": "\\)",
-        "*": "\\*",
-        "+": "\\+",
-        "/": "\\/",
-        "<": "\\<",
-        ">": "\\>",
-        "@": "\\@",
-        "^": "\\^",
-        "|": "\\|",
-        "~": "\\~",
-        "`": "\\`",
-        "\"": "\\\"",
-        " ": "\\ ",  // FIX: Uncommented space escaping
-        "{": "\\{",
-        "}": "\\}",
-        "\t": "\\t",
-        ".": "\\.",
+        // Special characters in filter_complex
+		"'": "'\\''",
+        ":" : "\\:",     // colon
+        "," : "\\,",     // comma
+        ";" : "\\;",     // semicolon
+        "=" : "\\=",     // equals
+        "[" : "\\[",     // brackets
+        "]" : "\\]",
+        "?" : "\\?",     // question mark
+        "!" : "\\!",     // exclamation
+        "#" : "\\#",     // hash
+        "$" : "\\$",     // dollar
+        "%" : "\\%",     // percentage
+        "&" : "\\&",     // ampersand
+        "(" : "\\(",     // parentheses
+        ")" : "\\)",
+        "*" : "\\*",     // asterisk
+        "+" : "\\+",     // plus
+        "/" : "\\/",     // slash
+        "<" : "\\<",     // angle brackets
+        ">" : "\\>",
+        "@" : "\\@",     // at sign
+        "^" : "\\^",     // caret
+        "|" : "\\|",     // pipe
+        "~" : "\\~",     // tilde
+        "`" : "\\`",     // backtick
+        "\"": "\\\"",    // double quote
+        " " : "\\ ",     // Space (for shell safety)
+        "{" : "\\{",     // Curly braces
+        "}" : "\\}",
+        "\t": "\\t",     // Tab character
+        "." : "\\.",     // Dot
     }
-
+    
     // Apply all replacements
     for original, escaped := range replacements {
         text = strings.ReplaceAll(text, original, escaped)
     }
-
+    
     return text
 }
 
