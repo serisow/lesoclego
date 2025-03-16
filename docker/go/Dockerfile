@@ -26,3 +26,12 @@ RUN wget https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-
 
 # Verify FFmpeg and drawtext filter
 RUN ffmpeg -filters | grep drawtext
+
+# Install font packages to match Drupal environment
+RUN apt-get update && apt-get install -y \
+    fonts-dejavu \
+    fonts-droid-fallback \
+    fonts-freefont-ttf \
+    fonts-liberation \
+    fonts-opensans \
+    && rm -rf /var/lib/apt/lists/*

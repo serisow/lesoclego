@@ -14,6 +14,8 @@ type TextBlock struct {
 	Position        string `json:"position"`
 	FontSize        string `json:"font_size"`
 	FontColor       string `json:"font_color"`
+	FontFamily      string `json:"font_family"`
+	FontStyle      string `json:"font_style"`
 	BackgroundColor string `json:"background_color"`
 	CustomX         string `json:"custom_x,omitempty"`
 	CustomY         string `json:"custom_y,omitempty"`

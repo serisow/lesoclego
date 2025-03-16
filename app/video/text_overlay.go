@@ -3,6 +3,8 @@ package video
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -287,6 +289,7 @@ func (tp *TextProcessorImpl) getSlideDirectionFromPosition(position string) stri
 	return "unsupported_direcion"
 }
 
+// BuildTextBlockWithAnimation generates the FFmpeg drawtext filter parameters with font & style
 func (tp *TextProcessorImpl) BuildTextBlockWithAnimation(
 	block TextBlock,
 	width, height int,
@@ -340,9 +343,32 @@ func (tp *TextProcessorImpl) BuildTextBlockWithAnimation(
 		fontSize = size
 	}
 
+	// Get font parameters for font family
+	fontParam := ""
+	if block.FontFamily != "" && block.FontFamily != "default" {
+		fontFile := tp.getFontFilePath(block.FontFamily)
+		if fontFile != "" {
+			fontParam = fmt.Sprintf(":fontfile='%s'", fontFile)
+		}
+	}
+
+	// Get style parameters based on font style
+	styleParams := ""
+	switch block.FontStyle {
+	case "outline":
+		styleParams = ":borderw=1.5:bordercolor=black"
+	case "shadow":
+		styleParams = ":shadowx=2:shadowy=2:shadowcolor=black"
+	case "outline_shadow":
+		styleParams = ":borderw=1.5:bordercolor=black:shadowx=2:shadowy=2:shadowcolor=black"
+	case "normal":
+	default:
+		// No additional styling
+	}
+
 	// Build the basic filter
-	filter := fmt.Sprintf("drawtext=text='%s':fontsize=%s:fontcolor=%s:%s",
-		text, block.FontSize, convertToFFmpegColor(block.FontColor), positionParams)
+	filter := fmt.Sprintf("drawtext=text='%s':fontsize=%s:fontcolor=%s%s%s:%s",
+		text, block.FontSize, convertToFFmpegColor(block.FontColor), fontParam, styleParams, positionParams)
 
 	// Add background if specified
 	if block.BackgroundColor != "" {
@@ -476,4 +502,65 @@ func (tp *TextProcessorImpl) BuildTextBlockWithAnimation(
 	}
 
 	return filter
+}
+
+// getFontFilePath attempts to find a font file based on the provided font family name
+func (tp *TextProcessorImpl) getFontFilePath(fontFamily string) string {
+	// Common font directories to search
+	fontDirs := []string{
+		"/usr/share/fonts/dejavu",
+		"/usr/share/fonts/opensans",
+		"/usr/share/fonts/droid",
+		"/usr/share/fonts/liberation",
+		"/usr/share/fonts/freefont",
+		"/usr/share/fonts/truetype",
+		"/usr/share/fonts/TTF",
+	}
+
+	// Common font filename patterns for the requested font family
+	fontVariants := []string{
+		fontFamily + ".ttf",
+		fontFamily + "-Regular.ttf",
+		strings.ToLower(fontFamily) + ".ttf",
+		strings.ToLower(fontFamily) + "-regular.ttf",
+		strings.ReplaceAll(fontFamily, " ", "") + ".ttf",
+		strings.ReplaceAll(strings.ToLower(fontFamily), " ", "") + ".ttf",
+	}
+
+	// Search for the font file in all font directories
+	for _, dir := range fontDirs {
+		for _, variant := range fontVariants {
+			fontPath := filepath.Join(dir, variant)
+			if _, err := os.Stat(fontPath); err == nil {
+				// Font file found
+				return fontPath
+			}
+		}
+	}
+
+	// If we get here, try a more exhaustive search
+	for _, dir := range fontDirs {
+		if _, err := os.Stat(dir); err == nil {
+			// Directory exists, search recursively
+			matches, err := filepath.Glob(filepath.Join(dir, "**", "*.ttf"))
+			if err != nil {
+				// Fall back to a simpler direct search
+				matches, _ = filepath.Glob(filepath.Join(dir, "*.ttf"))
+			}
+
+			// Look for a font name match
+			for _, match := range matches {
+				baseName := strings.ToLower(filepath.Base(match))
+				searchName := strings.ToLower(fontFamily)
+				
+				// Check if the font file name contains the requested font family name
+				if strings.Contains(baseName, searchName) {
+					return match
+				}
+			}
+		}
+	}
+
+	// Font not found, return empty string
+	return ""
 }

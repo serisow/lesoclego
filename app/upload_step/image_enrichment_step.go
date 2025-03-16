@@ -170,6 +170,8 @@ func (s *ImageEnrichmentStepImpl) processTextBlocks(newsItem NewsItem) []map[str
                 "position":         getStringValue(templateBlock, "position", "center"),
                 "font_size":        getStringValue(templateBlock, "font_size", "24"),
                 "font_color":       getStringValue(templateBlock, "font_color", "white"),
+                "font_family":      getStringValue(templateBlock, "font_family", "default"),
+                "font_style":       getStringValue(templateBlock, "font_style", "normal"),
                 "background_color": getStringValue(templateBlock, "background_color", ""),
             }
             

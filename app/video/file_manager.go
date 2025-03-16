@@ -457,6 +457,8 @@ func parseTextBlock(data map[string]interface{}) TextBlock {
         Position:        getStringValue(data, "position", "center"),
         FontSize:        getStringValue(data, "font_size", "10"),
         FontColor:       getStringValue(data, "font_color", "white"),
+        FontFamily:      getStringValue(data, "font_family", "default"),  // New field
+        FontStyle:       getStringValue(data, "font_style", "normal"),    // New field
         BackgroundColor: getStringValue(data, "background_color", ""),
     }
     
