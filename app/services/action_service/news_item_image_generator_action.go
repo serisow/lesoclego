@@ -43,6 +43,9 @@ func NewNewsItemImageGeneratorActionService(logger *slog.Logger) *NewsItemImageG
 
 	// Pre-register the OpenAI image service
 	service.RegisterLLMService("openai_image", llm_service.NewOpenAIImageService(logger))
+	// Pre-register the Gemini image service
+	service.RegisterLLMService("gemini", llm_service.NewGeminiService(logger))
+
 	
 	return service
 }
@@ -118,51 +121,74 @@ func (s *NewsItemImageGeneratorActionService) Execute(ctx context.Context, actio
 				// Extract LLM service configuration
 				configParams := make(map[string]interface{})
 				
-				// Add required parameters for OpenAI image service
-				configParams["service_name"] = imageGenerator
-				configParams["image_size"] = imageSize
-				
 				// Find the correct LLM configuration
 				for _, step := range pipelineContext.Steps {
 					if step.LLMServiceConfig != nil && step.StepOutputKey == imageConfigID {
 						// Use this step's LLM service config
 						configParams = step.LLMServiceConfig
-						// Make sure to set the image size
-						configParams["image_size"] = imageSize
 						break
 					}
 				}
 				
-				// If we don't have required fields, try to use default configuration
-				if _, ok := configParams["api_url"]; !ok {
-					// Check for "openai_image" service's standard config
-					// Default OpenAI DALL-E API URL
-					configParams["api_url"] = "https://api.openai.com/v1/images/generations"
+				// Configure service-specific parameters
+				if imageGenerator == "openai_image" {
+					// Make sure to set the image size for OpenAI
+					configParams["image_size"] = imageSize
+					
+					// If we don't have required fields, try to use default configuration
+					if _, ok := configParams["api_url"]; !ok {
+						// Default OpenAI DALL-E API URL
+						configParams["api_url"] = "https://api.openai.com/v1/images/generations"
+					}
+					
+					// Ensure model name is set for DALL-E
+					if _, ok := configParams["model_name"]; !ok {
+						configParams["model_name"] = "dall-e-3"
+					}
+				} else if imageGenerator == "gemini" {
+					// For Gemini, make sure model name indicates this is an image generation request
+					modelName, ok := configParams["model_name"].(string)
+					if !ok || !strings.Contains(strings.ToLower(modelName), "image") {
+						// Set to the image generation model
+						configParams["model_name"] = "gemini-2.0-flash-exp-image"
+					}
+					
+					// Set Gemini-specific API URL if not already set
+					if _, ok := configParams["api_url"]; !ok {
+						configParams["api_url"] = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image:generateContent"
+					}
 				}
 				
+				// Set API key if not already configured
 				if _, ok := configParams["api_key"]; !ok {
-					// Try to get API key from environment
-					apiKey := os.Getenv("OPENAI_API_KEY")
+					var envVarName string
+					if imageGenerator == "openai_image" {
+						envVarName = "OPENAI_API_KEY"
+					} else if imageGenerator == "gemini" {
+						envVarName = "GEMINI_API_KEY"
+					}
+					
+					apiKey := os.Getenv(envVarName)
 					if apiKey != "" {
 						configParams["api_key"] = apiKey
 					} else {
-						s.logger.Error("OpenAI API key not found in config or environment",
-							slog.String("article_id", newsItem.ArticleID))
+						s.logger.Error("API key not found in config or environment",
+							slog.String("article_id", newsItem.ArticleID),
+							slog.String("service", imageGenerator),
+							slog.String("env_var", envVarName))
 						
 						// Store error in result
 						mu.Lock()
 						newsItem.ImageInfo = nil
-						newsItem.ImageError = "API key not found in config or environment"
+						newsItem.ImageError = fmt.Sprintf("%s API key not found in config or environment", imageGenerator)
 						batchResults[idx] = newsItem
 						mu.Unlock()
 						return
 					}
 				}
 				
-				// Ensure model name is set for DALL-E
-				if _, ok := configParams["model_name"]; !ok {
-					configParams["model_name"] = "dall-e-3"
-				}
+				// Add service name to config params
+				configParams["service_name"] = imageGenerator
 				
 				// Attempt to generate image with retries
 				var success bool
@@ -271,6 +297,13 @@ func parseImageResult(imageResult string) (interface{}, error) {
 	
 	// If we have a map with a URL field, that's what we want
 	if infoMap, ok := imageInfo.(map[string]interface{}); ok {
+		// Check if there's an error flag from Gemini
+		if isError, ok := infoMap["error"].(bool); ok && isError {
+			// This is an error response from Gemini, but we'll return it as-is
+			// so the error message can be included in the NewsItemWithImage
+			return infoMap, nil
+		}
+		
 		// Check if we have a data array (OpenAI format)
 		if dataArray, ok := infoMap["data"].([]interface{}); ok && len(dataArray) > 0 {
 			if firstItem, ok := dataArray[0].(map[string]interface{}); ok {
@@ -285,6 +318,13 @@ func parseImageResult(imageResult string) (interface{}, error) {
 		
 		// Check for direct URL field
 		if url, ok := infoMap["url"].(string); ok && url != "" {
+			return infoMap, nil
+		}
+		
+		// Check for Gemini format with text_response
+		if _, ok := infoMap["text_response"].(string); ok {
+			// Gemini might return a text response instead of an image
+			// We'll keep it as is, but log it
 			return infoMap, nil
 		}
 	}
