@@ -1,132 +1,332 @@
-# LeSocle: Go Pipeline Execution Service
+You're right, I should create a more comprehensive analysis. Let me examine the key files in more detail to better understand the project structure and provide a more thorough document.
 
-LeSocle is a sophisticated pipeline execution service written in Go that works in tandem with a Drupal backend system. It provides a robust framework for executing configurable, multi-step processing pipelines that can include various operations such as LLM interactions, web searches, social media actions, and content generation.
+Read file: app/main.go
+
+Read file: app/pipeline_type/type.go
+
+Read file: app/pipeline/pipeline.go
+
+Read file: app/plugin_registry/plugin_registry.go
+
+Read file: app/llm_step/llm_step.go
+
+Read file: app/action_step/action_step.go
+
+Read file: app/services/llm_service/llm_service.go
+
+Read file: app/services/action_service/action_service.go
+
+Read file: app/services/llm_service/openai.go
+
+Read file: app/search_step/google_search_step.go
+
+Read file: app/social_media_step/social_media_step.go
+
+Read file: app/video/service.go
+
+Read file: app/scheduler/scheduler.go
+
+Read file: app/server/server.go
+Based on my comprehensive analysis of the codebase, I'll now provide a detailed documentation that will help you deeply understand the "lesocle-go" project:
+
+# Lesocle-Go Project Architecture Documentation
+
+## Project Overview
+
+Lesocle-Go is a sophisticated pipeline execution system designed for automating complex content generation workflows. It's built in Go with a modular architecture that orchestrates various processing steps, ranging from AI model interactions to search operations, content generation, and social media publishing.
+
+The system can be thought of as a flexible workflow engine that connects different services and capabilities through a plugin-based architecture, making it highly extensible for diverse content automation needs.
 
 ## Core Architecture
 
-The service implements a modular architecture with several key components:
+### Pipeline System
 
-### 1. Pipeline Configuration & Execution
+The heart of the application is a pipeline execution engine that processes a sequence of steps defined in pipeline configurations. Each pipeline contains multiple steps that are executed in order, with results from each step available to subsequent steps.
 
-The pipeline system mirrors Drupal's configuration entities:
-- `Pipeline` represents a sequence of steps to be executed
-- `PipelineStep` defines individual operations within a pipeline 
-- `Context` provides a shared data store for steps to exchange information
-- Multiple execution modes support both scheduled and on-demand processing
+```
+[Pipeline Configuration] → [Pipeline Engine] → [Step 1] → [Step 2] → ... → [Step N] → [Results]
+```
 
-### 2. Plugin Registry System
+### Plugin-Based Architecture
 
-The `PluginRegistry` provides a flexible extension mechanism that mirrors Drupal's plugin architecture:
-- Registers and manages different step types (LLM, action, search)
-- Manages service instances for LLM providers and action handlers
-- Allows dynamic registration of new step implementations
-- Creates step instances at runtime based on configuration
+The system follows a plugin-based architecture where:
+1. **Step Types** define different operations (LLM interactions, actions, searches, etc.)
+2. **Services** provide integrations with external systems (OpenAI, Anthropic, Google, social media platforms)
+3. **Registry** manages all available steps and services
 
-### 3. Scheduler
+This design allows for easy extension without modifying core code.
 
-The scheduler component manages timed execution of pipelines:
-- Polls for scheduled pipelines from the Drupal backend
-- Supports one-time and recurring schedules (daily, weekly, monthly)
-- Prevents concurrent execution of the same pipeline
-- Tracks execution failures and implements retry policies
+## Key Components
 
-### 4. HTTP Server
+### 1. Pipeline Core
 
-The service exposes HTTP endpoints for:
-- On-demand pipeline execution
-- Execution status tracking
-- Result retrieval
-- Media file serving (images, videos)
+**Pipeline Execution Engine** (`pipeline/pipeline.go`):
+- Orchestrates step execution
+- Manages the pipeline context (data passing between steps)
+- Handles errors and result reporting
+- Tracks execution status
 
-## Step Types and Integrations
+**Pipeline Types** (`pipeline_type/type.go`):
+- Defines data structures for pipelines and steps
+- Contains configuration types for different step types
+- Provides context management for data sharing
 
-### LLM Steps
-- OpenAI: Text generation and DALL-E image creation
-- Anthropic: Claude models for text generation
-- Gemini: Google's Gemini models for text and image generation
-- ElevenLabs & AWS Polly: Text-to-speech conversion
+**Plugin Registry** (`plugin_registry/plugin_registry.go`):
+- Central repository for all available components
+- Manages registration and retrieval of steps and services
+- Enables dynamic loading of components
 
-### Search Steps
-- Google Custom Search: Retrieves and processes web search results
-- News API: Searches for news articles with content extraction
+### 2. Step Implementations
 
-### Action Steps
-- Social Media: Posts to Twitter/X, LinkedIn, Facebook
-- Video Generation: Creates videos from images and audio
-- Webhook Integration: Sends data to external services
-- SMS Sending: Delivers messages via Twilio
+Steps are the building blocks of pipelines, each performing a specific function:
 
-### Upload Steps
-- Image Upload: Processes and stores images
-- Audio Upload: Handles audio content
-- Content enrichment: Adds metadata and overlays to media
+**LLM Step** (`llm_step/llm_step.go`):
+- Handles interactions with language models (OpenAI, Anthropic, Gemini)
+- Processes prompts with dynamic content replacement
+- Stores responses in the pipeline context
 
-## Drupal Integration
+**Action Step** (`action_step/action_step.go`):
+- Executes actions both on Go-side and Drupal-side
+- For Go-side: Performs actions directly using action services
+- For Drupal-side: Prepares data to be executed by Drupal
 
-The service maintains a tight integration with its Drupal counterpart:
-- Fetches pipeline configurations via REST API
-- Reports execution results back to Drupal
-- Respects Drupal's plugin architecture
-- Handles authentication via configured credentials
-- Maintains compatible data structures for seamless interchange
+**Search Steps**:
+- `search_step/google_search_step.go`: Performs Google Custom Search and extracts content
+- `search_step/news_api_search_step.go`: Retrieves and processes news articles
 
-### API Contract
+**Social Media Step** (`social_media_step/social_media_step.go`):
+- Generates optimized content for multiple platforms (Twitter, LinkedIn, Facebook)
+- Handles platform-specific formatting and length constraints
 
-1. **Configuration Retrieval**:
-   - GET `/pipelines/{id}` - Retrieves full pipeline configuration
-   - GET `/pipelines/scheduled` - Gets scheduled pipelines
+**Upload Steps**:
+- `upload_step/upload_image_step.go`: Handles image download and storage
+- `upload_step/upload_audio_step.go`: Manages audio file processing
 
-2. **Execution Management**:
-   - POST `/pipeline/{id}/execute` - Triggers on-demand execution
-   - GET `/pipeline/{id}/execution/{execution_id}/status` - Checks execution status
-   - GET `/pipeline/{id}/execution/{execution_id}/results` - Retrieves results
+### 3. Service Layer
 
-3. **Result Reporting**:
-   - POST `/pipeline/{id}/execution-result` - Reports execution results to Drupal
+**LLM Services** (`services/llm_service/`):
+- Abstract interface for language model interactions
+- Implementations for different providers:
+  - `openai.go`: OpenAI API integration with retry logic
+  - `anthropic.go`: Anthropic Claude API integration
+  - `gemini.go`: Google Gemini integration
+  - `elevenlabs.go`: Text-to-speech generation
 
-4. **Media Serving**:
-   - GET `/api/videos/{file_id}` - Serves generated video files
-   - GET `/api/images/{file_id}` - Serves generated image files
+**Action Services** (`services/action_service/`):
+- Interface for executing various actions
+- Implementations include:
+  - Social media posting (Twitter, LinkedIn, Facebook)
+  - SMS sending
+  - News image generation
+  - Webhook integration
 
-## Concurrency & State Management
+### 4. Media Processing
 
-The service implements sophisticated concurrency controls:
-- Thread-safe execution store for tracking pipeline status
-- Mutex-protected maps for running pipelines
-- Batch processing for resource-intensive operations
-- Configurable concurrency limits for external API calls
-- Background cleanup of expired execution results
+**Video Generation** (`video/`):
+- `service.go`: Orchestrates video creation from images and audio
+- `ffmpeg.go`: Handles FFmpeg operations for media processing
+- `text_overlay.go`: Manages text overlays and animations
 
-## Error Handling & Recovery
+### 5. Infrastructure
 
-Robust error handling throughout the system:
-- Retry mechanisms for transient external service failures
-- Comprehensive error logging with context
-- Error propagation to Drupal for visibility
-- Step failure isolation to prevent pipeline abandonment
-- Execution failure tracking with automated throttling
+**Scheduler** (`scheduler/scheduler.go`):
+- Manages pipeline scheduling (one-time and recurring)
+- Checks for pipelines that need execution
+- Handles execution coordination and failure management
 
-## Storage Management
+**Server** (`server/server.go`):
+- HTTP server for on-demand pipeline execution
+- API endpoints for execution status and results
+- File serving for generated media
 
-The service manages generated content with:
-- Structured directory hierarchy for different media types
-- Timestamp-based organization for easy retrieval
-- Scheduled cleanup of old files
-- Metadata tracking for generated content
-- URL scheme for consistent access
+**Main Application** (`main.go`):
+- Application entry point
+- Initializes components and registers plugins
+- Sets up server and scheduler processes
 
-## Logging System
+## Data Flow
 
-A comprehensive logging system with:
-- Structured logs (slog)
-- Daily rotating log files
-- Log level configuration
-- Component-specific loggers
-- Detailed error and transaction logging
+1. A pipeline configuration is defined with multiple steps
+2. The scheduler or an API request triggers pipeline execution
+3. The pipeline engine executes each step in sequence:
+   - LLM steps interact with AI models
+   - Search steps retrieve external data
+   - Action steps perform operations or prepare data
+   - Media steps generate content
+4. Each step stores its output in the pipeline context
+5. The pipeline tracks execution status and results
+6. Results are reported back to the calling system
 
-This Go service works as the execution engine for the Drupal-defined pipeline configurations, providing scalable, concurrent, and reliable processing while maintaining complete compatibility with Drupal's configuration and plugin systems.
+## Component Relationships
 
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       Main Application                      │
+└───────────────────────────┬─────────────────────────────────┘
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+┌─────────▼──────────┐ ┌───▼───────────┐ ┌──▼───────────────┐
+│      Server        │ │   Scheduler   │ │  Plugin Registry  │
+└─────────┬──────────┘ └───────┬───────┘ └──┬───────────────┘
+          │                    │            │
+          └────────────┬───────┘            │
+                      │                     │
+               ┌──────▼─────────┐           │
+               │ Pipeline Engine◄───────────┘
+               └──────┬─────────┘
+                      │
+┌─────────────────────┼─────────────────────────────────────┐
+│                     │                                     │
+│     ┌───────────────┼───────────────┐                     │
+│     │               │               │                     │
+│  ┌──▼──┐        ┌───▼───┐       ┌──▼───┐                 │
+│  │LLM  │        │Search │       │Action│                 │
+│  │Steps│        │Steps  │       │Steps │                 │
+│  └──┬──┘        └───┬───┘       └──┬───┘                 │
+│     │               │              │                     │
+│  ┌──▼──────────────▼──────────────▼───┐                 │
+│  │          Pipeline Context           │                 │
+│  └────────────────────────────────────┘                 │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 
+┌─────────────────────────────────────────────────────────┐
+│                   Service Layer                         │
+│                                                         │
+│  ┌───────────────┐  ┌──────────────┐ ┌───────────────┐  │
+│  │  LLM Services │  │Action Services│ │Media Services │  │
+│  │  - OpenAI     │  │- Social Media │ │- Video        │  │
+│  │  - Anthropic  │  │- SMS          │ │- Image        │  │
+│  │  - Gemini     │  │- Webhooks     │ │- Audio        │  │
+│  └───────────────┘  └──────────────┘ └───────────────┘  │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Execution Process
+
+1. **Initialization**:
+   - Load configuration
+   - Initialize plugin registry
+   - Register step types and services
+   - Start scheduler and server
+
+2. **Pipeline Execution**:
+   - Triggered by scheduler or API request
+   - Pipeline steps sorted by weight
+   - Each step is executed in sequence
+   - Context passed between steps for data sharing
+
+3. **Step Processing**:
+   - Step implementation retrieved from registry
+   - Step configuration applied
+   - Step execution with context access
+   - Results stored in pipeline context
+
+4. **Result Management**:
+   - Execution status tracked
+   - Results stored for retrieval
+   - Notifications sent when configured
+
+## Key Files and Their Roles
+
+1. **`main.go`**: 
+   - Application entry point
+   - Initializes components
+   - Configures and starts server and scheduler
+
+2. **`pipeline/pipeline.go`**: 
+   - Core execution engine
+   - Step execution orchestration
+   - Error handling and reporting
+
+3. **`pipeline_type/type.go`**: 
+   - Core data structures
+   - Context management
+   - Step configuration types
+
+4. **`plugin_registry/plugin_registry.go`**: 
+   - Component registration system
+   - Service and step type management
+
+5. **`llm_step/llm_step.go`**: 
+   - LLM interaction implementation
+   - Prompt processing
+   - Response handling
+
+6. **`action_step/action_step.go`**: 
+   - Action execution logic
+   - Drupal/Go execution location handling
+
+7. **`services/llm_service/llm_service.go`**: 
+   - LLM service interface definition
+   - Common utility functions
+
+8. **`services/action_service/action_service.go`**: 
+   - Action service interface
+   - Base implementation
+
+9. **`search_step/google_search_step.go`**: 
+   - Google search implementation
+   - Result formatting
+
+10. **`social_media_step/social_media_step.go`**: 
+    - Social media content generation
+    - Platform-specific formatting
+
+11. **`video/service.go`**: 
+    - Video generation orchestration
+    - Media file management
+
+12. **`scheduler/scheduler.go`**: 
+    - Scheduling logic
+    - Pipeline trigger management
+
+13. **`server/server.go`**: 
+    - HTTP server configuration
+    - Route setup
+
+## Extension Points
+
+The system is designed for extensibility through several mechanisms:
+
+1. **New Step Types**: Register additional step types for new capabilities
+2. **New LLM Services**: Add integrations with other AI providers
+3. **New Action Services**: Implement additional platform-specific actions
+4. **Custom Media Processing**: Enhance media generation capabilities
+
+## Interaction Model
+
+```
+┌───────────────┐            ┌────────────────┐
+│ External APIs │            │ Drupal Backend │
+└───────┬───────┘            └────────┬───────┘
+        │                            │
+        │HTTP                        │HTTP
+        │                            │
+┌───────▼────────────────────────────▼───────┐
+│                                            │
+│              Lesocle-Go System             │
+│                                            │
+│  ┌──────────────────────────────────────┐  │
+│  │            Pipeline Engine           │  │
+│  └──────────────────────────────────────┘  │
+│                                            │
+│  ┌─────────┐ ┌────────┐ ┌───────────────┐  │
+│  │ LLM     │ │ Search │ │ Social Media  │  │
+│  │ Steps   │ │ Steps  │ │ Steps         │  │
+│  └─────────┘ └────────┘ └───────────────┘  │
+│                                            │
+│  ┌─────────┐ ┌────────┐ ┌───────────────┐  │
+│  │ Action  │ │ Upload │ │ Video         │  │
+│  │ Steps   │ │ Steps  │ │ Generation    │  │
+│  └─────────┘ └────────┘ └───────────────┘  │
+│                                            │
+└────────────────────────────────────────────┘
+```
+
+This architecture allows the Lesocle-Go system to serve as a powerful content automation platform, connecting multiple AI capabilities, external services, and media generation into cohesive workflows.
 
 
 # Useful commands
@@ -145,8 +345,6 @@ curl -X POST http://lesoclego-dev.sa/pipeline/test_first_on_demand/execute \
      {"execution_id":"aa90167b-4f2a-4915-8e30-f50e094ab11c","links":{"results":"/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/results","self":"/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c","status":"/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/status"},"pipeline_id":"test_first_on_demand","status":"started","submitted_at":"2024-10-18T19:58:03Z","user_input":"Write a story about Agentic Workflow"}
 
 
-http://localhost:8086/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/results
-http://localhost:8086/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/status
-
-
+http://lesoclego-dev.sa/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/results
+http://lesoclego-dev.sa/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/status
 
