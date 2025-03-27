@@ -12,7 +12,7 @@ import (
 type Config struct {
 	Environment                string
 	APIEndpoint                string
-	APIHost					   string
+	APIHost                    string
 	ServiceBaseURL             string
 	CheckInterval              time.Duration
 	Domains                    []string
@@ -24,8 +24,8 @@ type Config struct {
 	GoogleCustomSearchAPIKey   string
 	GoogleCustomSearchEngineID string
 	NewsAPIKey                 string
-	CronURL      string
-    CronInterval time.Duration
+	CronURL                    string
+	CronInterval               time.Duration
 }
 
 var isTest bool
@@ -44,8 +44,8 @@ func Load() Config {
 
 	return Config{
 		Environment:                getEnv("ENVIRONMENT", "development"),
-		APIEndpoint:   				getEnv("API_ENDPOINT", "http://lesocle-dev.sa/api"),
-		APIHost:   				    getEnv("API_HOST", "lesocle-dev.sa"),
+		APIEndpoint:                getEnv("API_ENDPOINT", "http://lesocle-dev.sa/api"),
+		APIHost:                    getEnv("API_HOST", "lesocle-dev.sa"),
 		ServiceBaseURL:             getEnv("SERVICE_BASE_URL", "http://localhost:8086"), // Default to localhost
 		CheckInterval:              time.Duration(getEnvAsInt("CHECK_INTERVAL", 1200)) * time.Second,
 		Domains:                    []string{getEnv("DOMAIN", "example.com")},
@@ -58,7 +58,7 @@ func Load() Config {
 		GoogleCustomSearchEngineID: getEnv("GoogleCustomSearchEngineID", ""),
 		NewsAPIKey:                 getEnv("NEWS_API_KEY", ""),
 		CronURL:                    getEnv("DRUPAL_CRON_URL", ""),
-        CronInterval: 				time.Duration(getEnvAsInt("CRON_INTERVAL", 300)) * time.Second, // Default 5 minutes
+		CronInterval:               time.Duration(getEnvAsInt("CRON_INTERVAL", 300)) * time.Second, // Default 5 minutes
 	}
 }
 

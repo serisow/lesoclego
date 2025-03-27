@@ -17,287 +17,221 @@ import (
 )
 
 type PipelineHandler struct {
-    APIHost     string
+	APIHost     string
 	APIEndpoint string
 	Registry    *plugin_registry.PluginRegistry
 }
 
 func NewPipelineHandler(apiHost, apiEndpoint string, registry *plugin_registry.PluginRegistry) *PipelineHandler {
 	return &PipelineHandler{
-        APIHost: apiHost,
+		APIHost:     apiHost,
 		APIEndpoint: apiEndpoint,
 		Registry:    registry,
 	}
 }
 
 func (h *PipelineHandler) ExecutePipeline(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    pipelineID := vars["id"]
+	vars := mux.Vars(r)
+	pipelineID := vars["id"]
 
-    // Parse user input from request body
-    // Parse user input from request body
-    var requestBody struct {
-        UserInput   string `json:"user_input"`
-        CallbackURL string `json:"callback_url,omitempty"` // Optional
-    }
-    if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-        http.Error(w, "Invalid request body", http.StatusBadRequest)
-        return
-    }
+	// Parse user input from request body
+	// Parse user input from request body
+	var requestBody struct {
+		UserInput   string `json:"user_input"`
+		CallbackURL string `json:"callback_url,omitempty"` // Optional
+	}
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
-    // Fetch the full pipeline
-    fullPipeline, err := scheduler.FetchFullPipeline(pipelineID, h.APIHost, h.APIEndpoint)
-    if err != nil {
-        http.Error(w, fmt.Sprintf("Failed to fetch pipeline: %v", err), http.StatusInternalServerError)
-        return
-    }
+	// Fetch the full pipeline
+	fullPipeline, err := scheduler.FetchFullPipeline(pipelineID, h.APIHost, h.APIEndpoint)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to fetch pipeline: %v", err), http.StatusInternalServerError)
+		return
+	}
 
-    // Check if the pipeline is allowed to be executed on demand
-    if !isPipelineExecutableOnDemand(fullPipeline) {
-        http.Error(w, "This pipeline is not configured for on-demand execution", http.StatusForbidden)
-        return
-    }
+	// Check if the pipeline is allowed to be executed on demand
+	if !isPipelineExecutableOnDemand(fullPipeline) {
+		http.Error(w, "This pipeline is not configured for on-demand execution", http.StatusForbidden)
+		return
+	}
 
-    // Generate a unique execution ID
-    executionID := uuid.New().String()
+	// Generate a unique execution ID
+	executionID := uuid.New().String()
 
-    // Set the user input in the pipeline's context
-    if fullPipeline.Context == nil {
-        fullPipeline.Context = pipeline_type.NewContext()
-    }
-    fullPipeline.Context.SetStepOutput("user_input", requestBody.UserInput)
-    fullPipeline.Context.SetUserInput(requestBody.UserInput)
+	// Set the user input in the pipeline's context
+	if fullPipeline.Context == nil {
+		fullPipeline.Context = pipeline_type.NewContext()
+	}
+	fullPipeline.Context.SetStepOutput("user_input", requestBody.UserInput)
+	fullPipeline.Context.SetUserInput(requestBody.UserInput)
 
-    // Execute the pipeline with user input
-    go func() {
-        err := pipeline.ExecutePipeline(executionID, &fullPipeline, h.Registry)
-        if err != nil {
-            fmt.Printf("Error executing pipeline %s: %v\n", pipelineID, err)
-        }
-    }()
+	// Execute the pipeline with user input
+	go func() {
+		err := pipeline.ExecutePipeline(executionID, &fullPipeline, h.Registry)
+		if err != nil {
+			fmt.Printf("Error executing pipeline %s: %v\n", pipelineID, err)
+		}
+	}()
 
-    // Build response with execution details
-    response := map[string]interface{}{
-        "execution_id": executionID,
-        "pipeline_id":  pipelineID,
-        "status":       "started",
-        "submitted_at": time.Now().UTC().Format(time.RFC3339),
-        "user_input":   requestBody.UserInput,
-        "links": map[string]string{
-            "self":    fmt.Sprintf("/pipeline/%s/execution/%s", pipelineID, executionID),
-            "status":  fmt.Sprintf("/pipeline/%s/execution/%s/status", pipelineID, executionID),
-            "results": fmt.Sprintf("/pipeline/%s/execution/%s/results", pipelineID, executionID),
-        },
-    }
+	// Build response with execution details
+	response := map[string]interface{}{
+		"execution_id": executionID,
+		"pipeline_id":  pipelineID,
+		"status":       "started",
+		"submitted_at": time.Now().UTC().Format(time.RFC3339),
+		"user_input":   requestBody.UserInput,
+		"links": map[string]string{
+			"self":    fmt.Sprintf("/pipeline/%s/execution/%s", pipelineID, executionID),
+			"status":  fmt.Sprintf("/pipeline/%s/execution/%s/status", pipelineID, executionID),
+			"results": fmt.Sprintf("/pipeline/%s/execution/%s/results", pipelineID, executionID),
+		},
+	}
 
-    // Respond to the client
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusAccepted)
-    json.NewEncoder(w).Encode(response)
+	// Respond to the client
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(response)
 }
 
 func (h *PipelineHandler) GetExecutionStatus(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    executionID := vars["execution_id"]
+	vars := mux.Vars(r)
+	executionID := vars["execution_id"]
 
-    pipeline.ExecutionStore.RLock()
-    execResult, exists := pipeline.ExecutionStore.Executions[executionID]
-    pipeline.ExecutionStore.RUnlock()
+	pipeline.ExecutionStore.RLock()
+	execResult, exists := pipeline.ExecutionStore.Executions[executionID]
+	pipeline.ExecutionStore.RUnlock()
 
-    if !exists {
-        http.Error(w, "Execution ID not found", http.StatusNotFound)
-        return
-    }
+	if !exists {
+		http.Error(w, "Execution ID not found", http.StatusNotFound)
+		return
+	}
 
-    response := map[string]interface{}{
-        "execution_id": execResult.ExecutionID,
-        "status":       execResult.Status,
-        "submitted_at": execResult.SubmittedAt,
-        "completed_at": execResult.CompletedAt,
-    }
+	response := map[string]interface{}{
+		"execution_id": execResult.ExecutionID,
+		"status":       execResult.Status,
+		"submitted_at": execResult.SubmittedAt,
+		"completed_at": execResult.CompletedAt,
+	}
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(response)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
-
 
 func (h *PipelineHandler) GetExecutionResults(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    executionID := vars["execution_id"]
+	vars := mux.Vars(r)
+	executionID := vars["execution_id"]
 
-    pipeline.ExecutionStore.RLock()
-    execResult, exists := pipeline.ExecutionStore.Executions[executionID]
-    pipeline.ExecutionStore.RUnlock()
+	pipeline.ExecutionStore.RLock()
+	execResult, exists := pipeline.ExecutionStore.Executions[executionID]
+	pipeline.ExecutionStore.RUnlock()
 
-    if !exists {
-        http.Error(w, "Execution ID not found", http.StatusNotFound)
-        return
-    }
+	if !exists {
+		http.Error(w, "Execution ID not found", http.StatusNotFound)
+		return
+	}
 
-    if execResult.Status != pipeline.StatusCompleted {
-        http.Error(w, "Execution not completed yet", http.StatusAccepted)
-        return
-    }
+	if execResult.Status != pipeline.StatusCompleted {
+		http.Error(w, "Execution not completed yet", http.StatusAccepted)
+		return
+	}
 
-    response := map[string]interface{}{
-        "execution_id": execResult.ExecutionID,
-        "status":       execResult.Status,
-        "results":      execResult.Results,
-        "completed_at": execResult.CompletedAt,
-    }
+	response := map[string]interface{}{
+		"execution_id": execResult.ExecutionID,
+		"status":       execResult.Status,
+		"results":      execResult.Results,
+		"completed_at": execResult.CompletedAt,
+	}
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(response)
-}
-
-// VideoDownloadHandler serves video files generated by pipelines
-func (h *PipelineHandler) ServeVideoFile(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    fileID := vars["file_id"]
-    
-    if fileID == "" {
-        http.Error(w, "File ID is required", http.StatusBadRequest)
-        return
-    }
-    
-    // Determine file path based on storage pattern
-    basePath := filepath.Join("storage", "pipeline", "videos")
-    
-    // Look for the file using a glob pattern to search across all month directories
-    pattern := filepath.Join(basePath, "*", fmt.Sprintf("video_%s.mp4", fileID))
-    matches, err := filepath.Glob(pattern)
-    
-    if err != nil || len(matches) == 0 {
-        // Try other common video formats if mp4 isn't found
-        formats := []string{"mov", "webm", "avi", "mkv"}
-        found := false
-        
-        for _, format := range formats {
-            formatPattern := filepath.Join(basePath, "*", fmt.Sprintf("video_%s.%s", fileID, format))
-            formatMatches, formatErr := filepath.Glob(formatPattern)
-            
-            if formatErr == nil && len(formatMatches) > 0 {
-                matches = formatMatches
-                found = true
-                break
-            }
-        }
-        
-        if !found {
-            http.Error(w, "Video not found", http.StatusNotFound)
-            return
-        }
-    }
-    
-    filePath := matches[0]
-    
-    // Set appropriate headers
-    w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(filePath)))
-    
-    // Detect MIME type
-    fileExt := filepath.Ext(filePath)
-    switch strings.ToLower(fileExt) {
-    case ".mp4":
-        w.Header().Set("Content-Type", "video/mp4")
-    case ".mov":
-        w.Header().Set("Content-Type", "video/quicktime")
-    case ".webm":
-        w.Header().Set("Content-Type", "video/webm")
-    case ".avi":
-        w.Header().Set("Content-Type", "video/x-msvideo")
-    case ".mkv":
-        w.Header().Set("Content-Type", "video/x-matroska")
-    default:
-        w.Header().Set("Content-Type", "application/octet-stream")
-    }
-    
-    // Stream the file
-    http.ServeFile(w, r, filePath)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // ServeImageFile serves image files generated by pipelines (including Gemini)
 func (h *PipelineHandler) ServeImageFile(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    fileID := vars["file_id"]
-    
-    if fileID == "" {
-        http.Error(w, "File ID is required", http.StatusBadRequest)
-        return
-    }
-    
-    // Determine file path based on storage pattern
-    basePath := filepath.Join("storage", "pipeline", "images")
-    
-    // Look for the file using a glob pattern to search across all month directories
-    pattern := filepath.Join(basePath, "*", fmt.Sprintf("gemini_img_%s.png", fileID))
-    matches, err := filepath.Glob(pattern)
-    
-    if err != nil || len(matches) == 0 {
-        // Try other common patterns and formats if gemini pattern isn't found
-        formats := []string{"jpg", "jpeg", "webp", "gif"}
-        patterns := []string{
-            fmt.Sprintf("image_%s.*", fileID),
-            fmt.Sprintf("*_%s.*", fileID),
-        }
-        
-        found := false
-        for _, pat := range patterns {
-            patternPath := filepath.Join(basePath, "*", pat)
-            patternMatches, patternErr := filepath.Glob(patternPath)
-            
-            if patternErr == nil && len(patternMatches) > 0 {
-                matches = patternMatches
-                found = true
-                break
-            }
-            
-            // Try other formats explicitly if needed
-            for _, format := range formats {
-                formatPattern := filepath.Join(basePath, "*", fmt.Sprintf("*_%s.%s", fileID, format))
-                formatMatches, formatErr := filepath.Glob(formatPattern)
-                
-                if formatErr == nil && len(formatMatches) > 0 {
-                    matches = formatMatches
-                    found = true
-                    break
-                }
-            }
-            
-            if found {
-                break
-            }
-        }
-        
-        if !found {
-            http.Error(w, "Image not found", http.StatusNotFound)
-            return
-        }
-    }
-    
-    filePath := matches[0]
-    
-    // Set appropriate headers
-    w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(filePath)))
-    
-    // Detect MIME type
-    fileExt := filepath.Ext(filePath)
-    switch strings.ToLower(fileExt) {
-    case ".jpg", ".jpeg":
-        w.Header().Set("Content-Type", "image/jpeg")
-    case ".png":
-        w.Header().Set("Content-Type", "image/png")
-    case ".webp":
-        w.Header().Set("Content-Type", "image/webp")
-    case ".gif":
-        w.Header().Set("Content-Type", "image/gif")
-    case ".svg":
-        w.Header().Set("Content-Type", "image/svg+xml")
-    default:
-        w.Header().Set("Content-Type", "application/octet-stream")
-    }
-    
-    // Stream the file
-    http.ServeFile(w, r, filePath)
+	vars := mux.Vars(r)
+	fileID := vars["file_id"]
+
+	if fileID == "" {
+		http.Error(w, "File ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Determine file path based on storage pattern
+	basePath := filepath.Join("storage", "pipeline", "images")
+
+	// Look for the file using a glob pattern to search across all month directories
+	pattern := filepath.Join(basePath, "*", fmt.Sprintf("gemini_img_%s.png", fileID))
+	matches, err := filepath.Glob(pattern)
+
+	if err != nil || len(matches) == 0 {
+		// Try other common patterns and formats if gemini pattern isn't found
+		formats := []string{"jpg", "jpeg", "webp", "gif"}
+		patterns := []string{
+			fmt.Sprintf("image_%s.*", fileID),
+			fmt.Sprintf("*_%s.*", fileID),
+		}
+
+		found := false
+		for _, pat := range patterns {
+			patternPath := filepath.Join(basePath, "*", pat)
+			patternMatches, patternErr := filepath.Glob(patternPath)
+
+			if patternErr == nil && len(patternMatches) > 0 {
+				matches = patternMatches
+				found = true
+				break
+			}
+
+			// Try other formats explicitly if needed
+			for _, format := range formats {
+				formatPattern := filepath.Join(basePath, "*", fmt.Sprintf("*_%s.%s", fileID, format))
+				formatMatches, formatErr := filepath.Glob(formatPattern)
+
+				if formatErr == nil && len(formatMatches) > 0 {
+					matches = formatMatches
+					found = true
+					break
+				}
+			}
+
+			if found {
+				break
+			}
+		}
+
+		if !found {
+			http.Error(w, "Image not found", http.StatusNotFound)
+			return
+		}
+	}
+
+	filePath := matches[0]
+
+	// Set appropriate headers
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(filePath)))
+
+	// Detect MIME type
+	fileExt := filepath.Ext(filePath)
+	switch strings.ToLower(fileExt) {
+	case ".jpg", ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
+	case ".webp":
+		w.Header().Set("Content-Type", "image/webp")
+	case ".gif":
+		w.Header().Set("Content-Type", "image/gif")
+	case ".svg":
+		w.Header().Set("Content-Type", "image/svg+xml")
+	default:
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
+	// Stream the file
+	http.ServeFile(w, r, filePath)
 }
 
 // isPipelineExecutableOnDemand is a placeholder function

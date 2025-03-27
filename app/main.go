@@ -20,7 +20,6 @@ import (
 	"github.com/serisow/lesocle/server"
 	"github.com/serisow/lesocle/social_media_step"
 	"github.com/serisow/lesocle/upload_step"
-	"github.com/serisow/lesocle/video"
 
 	"github.com/serisow/lesocle/services/action_service"
 	"github.com/serisow/lesocle/services/llm_service"
@@ -33,10 +32,9 @@ func main() {
 
 	// Initialize the logger
 	logger, err := initLogger()
-    if err != nil {
-        log.Fatalf("Failed to initialize logger: %v", err)
-    }
-    
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
 
 	// Initialize PluginRegistry
 	registry := plugin_registry.NewPluginRegistry()
@@ -48,14 +46,10 @@ func main() {
 	go s.Start()
 	go s.StartCronTrigger() // Start cron trigger
 
-	// Initialize video cleanup service (retain videos for 7 days)
-	videoCleanupService := video.NewVideoCleanupService(logger, 7)
-	videoCleanupService.StartCleanupSchedule(24 * time.Hour) // Run once per day
-
-    // Start the execution store cleanup
-    executionResultRetention := 24 * time.Hour // Retain results for 24 hours
-    cleanupInterval := 1 * time.Hour           // Run cleanup every hour
-    pipeline.StartExecutionStoreCleanup(executionResultRetention, cleanupInterval)
+	// Start the execution store cleanup
+	executionResultRetention := 24 * time.Hour // Retain results for 24 hours
+	cleanupInterval := 1 * time.Hour           // Run cleanup every hour
+	pipeline.StartExecutionStoreCleanup(executionResultRetention, cleanupInterval)
 
 	// Initialize server
 	r := server.SetupRoutes(cfg.APIHost, cfg.APIEndpoint, registry)
@@ -99,35 +93,22 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 		return &action_step.ActionStepImpl{}
 	})
 	registry.RegisterStepType("google_search", func() step.Step {
-        return &search_step.GoogleSearchStepImpl{}
-    })
+		return &search_step.GoogleSearchStepImpl{}
+	})
 
 	registry.RegisterStepType("news_api_search", func() step.Step {
         return &search_step.NewsAPISearchStepImpl{}
     })
 
 	registry.RegisterStepType("social_media_step", func() step.Step {
-        return &social_media_step.SocialMediaStepImpl{}
-    })
+		return &social_media_step.SocialMediaStepImpl{}
+	})
 
 	registry.RegisterStepType("upload_image_step", func() step.Step {
 		return &upload_step.UploadImageStepImpl{
 			Logger: logger,
 		}
 	})
-
-	// Add the new audio step registration
-	registry.RegisterStepType("upload_audio_step", func() step.Step {
-		return &upload_step.UploadAudioStepImpl{
-			Logger: logger,
-		}
-	})
-
-	registry.RegisterStepType("image_enrichment_step", func() step.Step {
-        return &upload_step.ImageEnrichmentStepImpl{
-            Logger: logger,
-        }
-    })
 
 	// Register the LLM Services
 	registry.RegisterLLMService("openai", llm_service.NewOpenAIService(logger))
@@ -137,7 +118,7 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterLLMService("elevenlabs", llm_service.NewElevenLabsService(logger))
 	// This one is not a true LLM but an API, but TTS is expensive for dev environment
 	// so i use for the moment for that.
-    registry.RegisterLLMService("aws_polly", llm_service.NewAWSPollyService(logger))
+	registry.RegisterLLMService("aws_polly", llm_service.NewAWSPollyService(logger))
 
 	// Register Action services
 
@@ -148,29 +129,27 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterActionService("facebook_share", action_service.NewFacebookShareActionService(logger))
 	registry.RegisterActionService("send_sms", action_service.NewSendSMSActionService(logger))
 	registry.RegisterActionService("generic_webhook", action_service.NewGenericWebhookActionService(logger))
-	registry.RegisterActionService("video_generation", video.NewVideoGenerationActionService(logger))
-	registry.RegisterActionService("news_item_image_generator", action_service.NewNewsItemImageGeneratorActionService(logger))
-	
+
 }
 
 func initLogger() (*slog.Logger, error) {
-    // Configure log directory - you might want to make this configurable
-    logDir := filepath.Join("logs", "pipeline")
+	// Configure log directory - you might want to make this configurable
+	logDir := filepath.Join("logs", "pipeline")
 
-    // Create daily file handler
-    fileHandler, err := logging.NewDailyFileHandler(logDir, &slog.HandlerOptions{
-        Level: slog.LevelDebug,
-        ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-            // You can customize attribute handling here if needed
-            return a
-        },
-    })
-    if err != nil {
-        return nil, err
-    }
+	// Create daily file handler
+	fileHandler, err := logging.NewDailyFileHandler(logDir, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// You can customize attribute handling here if needed
+			return a
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Create logger with the custom handler
-    logger := slog.New(fileHandler)
+	// Create logger with the custom handler
+	logger := slog.New(fileHandler)
 
-    return logger, nil
+	return logger, nil
 }

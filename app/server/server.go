@@ -32,11 +32,10 @@ func SetupRoutes(apiHost, apiEndpoint string, registry *plugin_registry.PluginRe
 	r.HandleFunc("/pipeline/{id}/execution/{execution_id}/status", pipelineHandler.GetExecutionStatus).Methods("GET")
 	r.HandleFunc("/pipeline/{id}/execution/{execution_id}/results", pipelineHandler.GetExecutionResults).Methods("GET")
 
-	// Add new video download route
-	r.HandleFunc("/api/videos/{file_id}", pipelineHandler.ServeVideoFile).Methods("GET")
+	// Video download route removed
 
 	// Add new route for image serving
-    r.HandleFunc("/api/images/{file_id}", pipelineHandler.ServeImageFile).Methods("GET")
+	r.HandleFunc("/api/images/{file_id}", pipelineHandler.ServeImageFile).Methods("GET")
 
 	return r
 }
