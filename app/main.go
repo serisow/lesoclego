@@ -97,8 +97,8 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	})
 
 	registry.RegisterStepType("news_api_search", func() step.Step {
-        return &search_step.NewsAPISearchStepImpl{}
-    })
+		return &search_step.NewsAPISearchStepImpl{}
+	})
 
 	registry.RegisterStepType("social_media_step", func() step.Step {
 		return &social_media_step.SocialMediaStepImpl{}
@@ -121,7 +121,6 @@ func registerStepTypes(registry *plugin_registry.PluginRegistry, logger *slog.Lo
 	registry.RegisterLLMService("aws_polly", llm_service.NewAWSPollyService(logger))
 
 	// Register Action services
-
 	registry.RegisterActionService("post_tweet", action_service.NewPostTweetActionService(logger))
 	registry.RegisterActionService("search_tweets", action_service.NewSearchTweetsActionService(logger))
 	registry.RegisterActionService("tweet_data_enricher", action_service.NewTweetDataEnricherService(logger))

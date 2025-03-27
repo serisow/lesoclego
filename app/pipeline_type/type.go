@@ -39,9 +39,8 @@ type PipelineStep struct {
 	NewsAPIConfig      *NewsAPIConfig         `json:"news_api_config,omitempty"`
 	SearchInput        string                 `json:"search_input,omitempty"`
 	// Drupal node data for social media step
-	ArticleData           map[string]interface{} `json:"article_data,omitempty"`
-	UploadImageConfig     *UploadImageConfig     `json:"upload_image_config,omitempty"`
-	UploadAudioConfig     *UploadAudioConfig     `json:"upload_audio_config,omitempty"`
+	ArticleData       map[string]interface{} `json:"article_data,omitempty"`
+	UploadImageConfig *UploadImageConfig     `json:"upload_image_config,omitempty"`
 }
 
 type ActionDetails struct {
@@ -94,24 +93,10 @@ type NewsAPIConfig struct {
 
 // UploadImageConfig holds configuration for upload image steps
 type UploadImageConfig struct {
-	FileID     int64                    `json:"image_file_id"`
-	FileURL    string                   `json:"image_file_url"`
-	FileURI    string                   `json:"image_file_uri"`
-	FileMime   string                   `json:"image_file_mime"`
-	FileName   string                   `json:"image_file_name"`
-	FileSize   int64                    `json:"image_file_size"`
-	Duration   float64                  `json:"duration"`
-	TextBlocks []map[string]interface{} `json:"text_blocks,omitempty"`
+	FileID   int64  `json:"image_file_id"`
+	FileURL  string `json:"image_file_url"`
+	FileURI  string `json:"image_file_uri"`
+	FileMime string `json:"image_file_mime"`
+	FileName string `json:"image_file_name"`
+	FileSize int64  `json:"image_file_size"`
 }
-
-// UploadAudioConfig holds configuration for upload audio steps
-type UploadAudioConfig struct {
-	FileID       int64   `json:"audio_file_id"`
-	FileURL      string  `json:"audio_file_url"`
-	FileURI      string  `json:"audio_file_uri"`
-	FileMime     string  `json:"audio_file_mime"`
-	FileName     string  `json:"audio_file_name"`
-	FileDuration float64 `json:"audio_file_duration"`
-	FileSize     int64   `json:"audio_file_size"`
-}
-

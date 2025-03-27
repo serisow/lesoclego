@@ -110,7 +110,8 @@ Steps are the building blocks of pipelines, each performing a specific function:
   - `openai.go`: OpenAI API integration with retry logic
   - `anthropic.go`: Anthropic Claude API integration
   - `gemini.go`: Google Gemini integration
-  - `elevenlabs.go`: Text-to-speech generation
+  - `elevenlabs.go`: Text-to-speech generation with ElevenLabs
+  - `aws_polly.go`: Alternative text-to-speech using AWS Polly
 
 **Action Services** (`services/action_service/`):
 - Interface for executing various actions
@@ -120,14 +121,7 @@ Steps are the building blocks of pipelines, each performing a specific function:
   - News image generation
   - Webhook integration
 
-### 4. Media Processing
-
-**Video Generation** (`video/`):
-- `service.go`: Orchestrates video creation from images and audio
-- `ffmpeg.go`: Handles FFmpeg operations for media processing
-- `text_overlay.go`: Manages text overlays and animations
-
-### 5. Infrastructure
+### 4. Infrastructure
 
 **Scheduler** (`scheduler/scheduler.go`):
 - Manages pipeline scheduling (one-time and recurring)
@@ -196,9 +190,9 @@ Steps are the building blocks of pipelines, each performing a specific function:
 │                                                         │
 │  ┌───────────────┐  ┌──────────────┐ ┌───────────────┐  │
 │  │  LLM Services │  │Action Services│ │Media Services │  │
-│  │  - OpenAI     │  │- Social Media │ │- Video        │  │
-│  │  - Anthropic  │  │- SMS          │ │- Image        │  │
-│  │  - Gemini     │  │- Webhooks     │ │- Audio        │  │
+│  │  - OpenAI     │  │- Social Media │ │- Image        │  │
+│  │  - Anthropic  │  │- SMS          │ │- Audio        │  │
+│  │  - Gemini     │  │- Webhooks     │ │               │  │
 │  └───────────────┘  └──────────────┘ └───────────────┘  │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
@@ -299,7 +293,7 @@ The system is designed for extensibility through several mechanisms:
 ## Interaction Model
 
 ```
-┌───────────────┐            ┌────────────────┐
+┌─────────────────┐            ┌────────────────┐
 │ External APIs │            │ Drupal Backend │
 └───────┬───────┘            └────────┬───────┘
         │                            │
@@ -318,21 +312,20 @@ The system is designed for extensibility through several mechanisms:
 │  │ Steps   │ │ Steps  │ │ Steps         │  │
 │  └─────────┘ └────────┘ └───────────────┘  │
 │                                            │
-│  ┌─────────┐ ┌────────┐ ┌───────────────┐  │
-│  │ Action  │ │ Upload │ │ Video         │  │
-│  │ Steps   │ │ Steps  │ │ Generation    │  │
-│  └─────────┘ └────────┘ └───────────────┘  │
+│  ┌─────────┐ ┌────────┐                    │
+│  │ Action  │ │ Upload │                    │
+│  │ Steps   │ │ Steps  │                    │
+│  └─────────┘ └────────┘                    │
 │                                            │
 └────────────────────────────────────────────┘
 ```
 
-This architecture allows the Lesocle-Go system to serve as a powerful content automation platform, connecting multiple AI capabilities, external services, and media generation into cohesive workflows.
+This architecture allows the Lesocle-Go system to serve as a powerful content automation platform, connecting multiple AI capabilities, external services, and automated content creation into cohesive workflows.
 
 
 # Useful commands
 
 docker compose down && cd app/ && GOOS=linux go build -o lesoclego && cd .. && docker compose up
-
 
 
 EXAMPLE call one-time execution:
@@ -347,4 +340,3 @@ curl -X POST http://lesoclego-dev.sa/pipeline/test_first_on_demand/execute \
 
 http://lesoclego-dev.sa/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/results
 http://lesoclego-dev.sa/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/status
-
