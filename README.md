@@ -1,36 +1,3 @@
-You're right, I should create a more comprehensive analysis. Let me examine the key files in more detail to better understand the project structure and provide a more thorough document.
-
-Read file: app/main.go
-
-Read file: app/pipeline_type/type.go
-
-Read file: app/pipeline/pipeline.go
-
-Read file: app/plugin_registry/plugin_registry.go
-
-Read file: app/llm_step/llm_step.go
-
-Read file: app/action_step/action_step.go
-
-Read file: app/services/llm_service/llm_service.go
-
-Read file: app/services/action_service/action_service.go
-
-Read file: app/services/llm_service/openai.go
-
-Read file: app/search_step/google_search_step.go
-
-Read file: app/social_media_step/social_media_step.go
-
-Read file: app/video/service.go
-
-Read file: app/scheduler/scheduler.go
-
-Read file: app/server/server.go
-Based on my comprehensive analysis of the codebase, I'll now provide a detailed documentation that will help you deeply understand the "lesocle-go" project:
-
-# Lesocle-Go Project Architecture Documentation
-
 ## Project Overview
 
 Lesocle-Go is a sophisticated pipeline execution system designed for automating complex content generation workflows. It's built in Go with a modular architecture that orchestrates various processing steps, ranging from AI model interactions to search operations, content generation, and social media publishing.
