@@ -1,4 +1,5 @@
 .vscode
+.cursor/
 .env
 .env.local
 .env.production
