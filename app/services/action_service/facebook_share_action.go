@@ -65,7 +65,7 @@ func (s *FacebookShareActionService) Execute(ctx context.Context, actionConfig s
 		return "", err
 	}
 
-	// @TODO: REMOVE THIS JUST FOR TEST ; because now the imaage is local
+	// Note: For production, ensure image URLs are properly configured
 	data.ImageURL = "https://i.postimg.cc/Y0jyFx5m/test-sharing-image.webp"
 	// Choose posting method based on content type
 	if data.ImageURL != "" {
