@@ -121,33 +121,33 @@ Steps are the building blocks of pipelines, each performing a specific function:
 ## Component Relationships
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       Main Application                      │
-└───────────────────────────┬─────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                       Main Application                     │
+└──────────────────────────┬─────────────────────────────────┘
                            │
-          ┌────────────────┼────────────────┐
-          │                │                │
-┌─────────▼──────────┐ ┌───▼───────────┐ ┌──▼───────────────┐
-│      Server        │ │   Scheduler   │ │  Plugin Registry  │
-└─────────┬──────────┘ └───────┬───────┘ └──┬───────────────┘
-          │                    │            │
-          └────────────┬───────┘            │
-                      │                     │
-               ┌──────▼─────────┐           │
-               │ Pipeline Engine◄───────────┘
+          ┌────────────────┼───────────────┐
+          │                │               │
+┌─────────▼──────────┐ ┌───▼──────────┐ ┌──▼───────────────┐
+│      Server        │ │   Scheduler  │ │  Plugin Registry │
+└─────────┬──────────┘ └──────┬───────┘ └──┬───────────────┘
+          │                   │            │
+          └───────────┬───────┘            │
+                      │                    │
+               ┌──────▼─────────┐          │
+               │ Pipeline Engine◄──────────┘
                └──────┬─────────┘
                       │
-┌─────────────────────┼─────────────────────────────────────┐
-│                     │                                     │
-│     ┌───────────────┼───────────────┐                     │
-│     │               │               │                     │
-│  ┌──▼──┐        ┌───▼───┐       ┌──▼───┐                 │
-│  │LLM  │        │Search │       │Action│                 │
-│  │Steps│        │Steps  │       │Steps │                 │
-│  └──┬──┘        └───┬───┘       └──┬───┘                 │
-│     │               │              │                     │
+┌─────────────────────┼───────────────────────────────────┐
+│                     │                                   │
+│     ┌───────────────┼───────────────┐                   │
+│     │               │               │                   │
+│  ┌──▼──┐        ┌───▼───┐       ┌──▼───┐                │
+│  │LLM  │        │Search │       │Action│                │
+│  │Steps│        │Steps  │       │Steps │                │
+│  └──┬──┘        └───┬───┘       └─┬───-┘                │
+│     │               │             │                     │
 │  ┌──▼──────────────▼──────────────▼───┐                 │
-│  │          Pipeline Context           │                 │
+│  │          Pipeline Context          │                 │
 │  └────────────────────────────────────┘                 │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
@@ -155,12 +155,12 @@ Steps are the building blocks of pipelines, each performing a specific function:
 ┌─────────────────────────────────────────────────────────┐
 │                   Service Layer                         │
 │                                                         │
-│  ┌───────────────┐  ┌──────────────┐ ┌───────────────┐  │
-│  │  LLM Services │  │Action Services│ │Media Services │  │
-│  │  - OpenAI     │  │- Social Media │ │- Image        │  │
-│  │  - Anthropic  │  │- SMS          │ │- Audio        │  │
-│  │  - Gemini     │  │- Webhooks     │ │               │  │
-│  └───────────────┘  └──────────────┘ └───────────────┘  │
+│  ┌───────────────┐  ┌──────────────┐  ┌───────────────┐ │
+│  │  LLM Services │  │Action Services│ │Media Services │ │
+│  │  - OpenAI     │  │- Social Media │ │- Image        │ │
+│  │  - Anthropic  │  │- SMS          │ │- Audio        │ │
+│  │  - Gemini     │  │- Webhooks     │ │               │ │
+│  └───────────────┘  └──────────────┘  └───────────────┘ │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -261,12 +261,12 @@ The system is designed for extensibility through several mechanisms:
 
 ```
 ┌─────────────────┐            ┌────────────────┐
-│ External APIs │            │ Drupal Backend │
-└───────┬───────┘            └────────┬───────┘
-        │                            │
-        │HTTP                        │HTTP
-        │                            │
-┌───────▼────────────────────────────▼───────┐
+│ External APIs   │            │ Drupal Backend │
+└───────┬──────--─┘            └────────┬───────┘
+        │                               │
+        │HTTP                           │HTTP
+        │                               │
+┌───────▼──────────────────────────---──▼────┐
 │                                            │
 │              Lesocle-Go System             │
 │                                            │
@@ -288,22 +288,3 @@ The system is designed for extensibility through several mechanisms:
 ```
 
 This architecture allows the Lesocle-Go system to serve as a powerful content automation platform, connecting multiple AI capabilities, external services, and automated content creation into cohesive workflows.
-
-
-# Useful commands
-
-docker compose down && cd app/ && GOOS=linux go build -o lesoclego && cd .. && docker compose up
-
-
-EXAMPLE call one-time execution:
-
-curl -X POST http://lesoclego-dev.sa/pipeline/test_first_on_demand/execute \
-     -H "Content-Type: application/json" \
-     -d '{"user_input": "Analyze the impact of artificial intelligence on job markets"}'
-
-
-     {"execution_id":"aa90167b-4f2a-4915-8e30-f50e094ab11c","links":{"results":"/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/results","self":"/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c","status":"/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/status"},"pipeline_id":"test_first_on_demand","status":"started","submitted_at":"2024-10-18T19:58:03Z","user_input":"Write a story about Agentic Workflow"}
-
-
-http://lesoclego-dev.sa/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/results
-http://lesoclego-dev.sa/pipeline/test_first_on_demand/execution/aa90167b-4f2a-4915-8e30-f50e094ab11c/status
